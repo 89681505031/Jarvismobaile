@@ -352,10 +352,10 @@ print("Preserved conversation deadline across TTS and declared wake microphone s
 m = src / "MainActivity.kt"
 s = m.read_text(encoding="utf-8")
 if "fun setPicovoiceAccessKey(" not in s:
-    anchor = "    @JavascriptInterface\\n    fun getApiKeyStatus"
+    anchor = "    @JavascriptInterface\n    fun getApiKeyStatus"
     pos = s.find(anchor)
     if pos < 0:
-        anchor = "    @JavascriptInterface\\n    fun setApiKeys"
+        anchor = "    @JavascriptInterface\n    fun setApiKeys"
         pos = s.find(anchor)
     if pos < 0:
         raise SystemExit("Could not locate MainActivity JavascriptInterface settings bridge")
@@ -391,7 +391,7 @@ if "fun setPicovoiceAccessKey(" not in s:
 needle = "setupSpeechRecognizer()"
 idx = s.find(needle)
 if idx >= 0 and "JarvisWakeService::class.java" not in s[max(0, idx-300):idx+800]:
-    endline = s.find("\\n", idx)
+    endline = s.find("\n", idx)
     startup = r'''
         try {
             androidx.core.content.ContextCompat.startForegroundService(
