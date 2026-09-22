@@ -28,6 +28,18 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
+      - name: Restore stable debug signing key
+        env:
+          JARVIS_DEBUG_KEYSTORE_B64: ${{ secrets.JARVIS_DEBUG_KEYSTORE_B64 }}
+        run: |
+          if [ -n "$JARVIS_DEBUG_KEYSTORE_B64" ]; then
+            mkdir -p ~/.android
+            printf '%s' "$JARVIS_DEBUG_KEYSTORE_B64" | base64 --decode > ~/.android/debug.keystore
+            chmod 600 ~/.android/debug.keystore
+            echo "Using persistent Jarvis debug signing key"
+          else
+            echo "::warning::JARVIS_DEBUG_KEYSTORE_B64 is not configured; APK signature may change between runners."
+          fi
       - name: Build debug APK
         working-directory: mobile/android
         run: gradle --no-daemon assembleDebug
