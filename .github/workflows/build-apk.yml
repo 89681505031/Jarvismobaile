@@ -22,7 +22,7 @@ jobs:
       - name: Apply microphone sensitivity fix
         run: patch -p1 < patches/microphone-sensitivity.patch
       - name: Apply GigaChat and wake-service fix
-        run: patch -p1 < patches/gigachat-and-wake-fix.patch
+        run: python3 scripts/apply_runtime_fixes.py
       - uses: actions/setup-java@v5
         with:
           distribution: temurin
