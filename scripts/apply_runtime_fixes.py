@@ -280,7 +280,7 @@ if "jarvisWakeReceiver" not in s:
         s = s[:body+1] + r'''
         val wakeFilter = IntentFilter(JarvisWakeService.ACTION_WAKE)
         if (android.os.Build.VERSION.SDK_INT >= 33) {
-            registerReceiver(jarvisWakeReceiver, wakeFilter, RECEIVER_NOT_EXPORTED)
+            registerReceiver(jarvisWakeReceiver, wakeFilter, android.content.Context.RECEIVER_NOT_EXPORTED)
         } else {
             @Suppress("DEPRECATION")
             registerReceiver(jarvisWakeReceiver, wakeFilter)
@@ -408,12 +408,16 @@ idx = s.find(needle)
 if idx >= 0 and "JarvisWakeService::class.java" not in s[max(0, idx-300):idx+800]:
     endline = s.find("\n", idx)
     startup = r'''
-        try {
-            androidx.core.content.ContextCompat.startForegroundService(
-                this,
-                Intent(this, JarvisWakeService::class.java)
-            )
-        } catch (_: Exception) {}
+        if (androidx.core.content.ContextCompat.checkSelfPermission(
+                this, android.Manifest.permission.RECORD_AUDIO
+            ) == android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            try {
+                androidx.core.content.ContextCompat.startForegroundService(
+                    this,
+                    Intent(this, JarvisWakeService::class.java)
+                )
+            } catch (_: Exception) {}
+        }
 '''
     s = s[:endline+1] + startup + s[endline+1:]
 
