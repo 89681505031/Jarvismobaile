@@ -1,0 +1,36 @@
+name: Build Jarvis Android APK
+
+on:
+  push:
+    branches: [fix-microphone-sensitivity]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Unpack Android project
+        run: unzip -q mobile_fixed.zip
+      - name: Apply microphone sensitivity fix
+        run: patch -p1 < patches/microphone-sensitivity.patch
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+      - name: Build debug APK
+        working-directory: mobile/android
+        run: gradle --no-daemon assembleDebug
+      - name: Rename APK
+        run: cp mobile/android/app/build/outputs/apk/debug/app-debug.apk jarvis-phone-microphone-fixed.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: jarvis-phone-microphone-fixed
+          path: jarvis-phone-microphone-fixed.apk
+          if-no-files-found: error
