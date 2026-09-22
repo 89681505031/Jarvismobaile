@@ -351,6 +351,8 @@ print("Installed Porcupine JARVIS wake-word service, ACTION_WAKE receiver, and 3
 m = src / "MainActivity.kt"
 s = m.read_text(encoding="utf-8")
 s = s.replace("private val conversationResumeDurationMs = 12_000L", "private val conversationResumeDurationMs = 30_000L")
+# At TTS start, close the command recognizer and invalidate the old deadline.
+# A fresh 30-second deadline is created only after speech finishes.
 s = s.replace(
     """        manualListening = false
         conversationUntil = 0L
