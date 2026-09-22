@@ -305,3 +305,45 @@ if "jarvisWakeReceiver" not in s:
 m.write_text(s, encoding="utf-8")
 print("Installed Porcupine JARVIS wake-word service, ACTION_WAKE receiver, and 30-second conversation window")
 
+# Final runtime wiring: preserve the 30-second deadline across TTS and declare the
+# microphone foreground service on modern Android.
+m = src / "MainActivity.kt"
+s = m.read_text(encoding="utf-8")
+s = s.replace("private val conversationResumeDurationMs = 12_000L", "private val conversationResumeDurationMs = 30_000L")
+s = s.replace(
+    """        manualListening = false
+        conversationUntil = 0L
+        speechRecognizer?.cancel()
+""",
+    """        manualListening = false
+        if (resumeAfter) {
+            conversationUntil = maxOf(conversationUntil, System.currentTimeMillis() + 30_000L)
+        } else {
+            conversationUntil = 0L
+        }
+        speechRecognizer?.cancel()
+""",
+    1
+)
+s = s.replace(
+    "                startConversationListening(conversationResumeDurationMs)",
+    """                val remaining = (conversationUntil - System.currentTimeMillis()).coerceAtLeast(0L)
+                if (remaining > 0L) startConversationListening(remaining)
+                else restartWakeListening()""",
+    1
+)
+m.write_text(s, encoding="utf-8")
+
+manifest = app / "src/main/AndroidManifest.xml"
+s = manifest.read_text(encoding="utf-8")
+if "android.permission.FOREGROUND_SERVICE_MICROPHONE" not in s:
+    s = s.replace(
+        '<uses-permission android:name="android.permission.FOREGROUND_SERVICE" />',
+        '<uses-permission android:name="android.permission.FOREGROUND_SERVICE" />\\n    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />'
+    )
+if 'android:name=".JarvisWakeService"' not in s:
+    service = '        <service android:name=".JarvisWakeService" android:exported="false" android:foregroundServiceType="microphone" />\\n'
+    s = s.replace("    </application>", service + "    </application>")
+manifest.write_text(s, encoding="utf-8")
+print("Preserved conversation deadline across TTS and declared wake microphone service")
+
