@@ -20,11 +20,10 @@ jobs:
           sed -i 's/\r$//' mobile/android/app/src/main/java/com/jarvis/phone/JarvisWakeService.kt
       - name: Apply microphone sensitivity fix
         run: patch -p1 < patches/microphone-sensitivity.patch
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '17'
-      - uses: android-actions/setup-android@v3
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
