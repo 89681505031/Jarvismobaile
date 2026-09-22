@@ -340,20 +340,15 @@ s = s.replace(
         speechRecognizer?.cancel()
 """,
     """        manualListening = false
-        if (resumeAfter) {
-            conversationUntil = maxOf(conversationUntil, System.currentTimeMillis() + 30_000L)
-        } else {
-            conversationUntil = 0L
-        }
+        conversationUntil = 0L
         speechRecognizer?.cancel()
 """,
     1
 )
 s = s.replace(
     "                startConversationListening(conversationResumeDurationMs)",
-    """                val remaining = (conversationUntil - System.currentTimeMillis()).coerceAtLeast(0L)
-                if (remaining > 0L) startConversationListening(remaining)
-                else restartWakeListening()""",
+    """                conversationUntil = System.currentTimeMillis() + conversationResumeDurationMs
+                startConversationListening(conversationResumeDurationMs)""",
     1
 )
 m.write_text(s, encoding="utf-8")
