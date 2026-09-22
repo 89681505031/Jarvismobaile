@@ -183,7 +183,13 @@ class JarvisWakeService : Service() {
     private fun startWakeWord() {
         val accessKey = getSharedPreferences("jarvis_settings", MODE_PRIVATE)
             .getString("picovoice_access_key", "").orEmpty().trim()
-        if (accessKey.isBlank()) return
+        if (accessKey.isBlank()) {
+            // Porcupine is optional. Never keep a foreground microphone service alive
+            // when it cannot listen; manual SpeechRecognizer remains independent.
+            stopSelf()
+            return
+        }
+        if (manager != null) return
         try {
             try { manager?.stop() } catch (_: Exception) {}
             try { manager?.delete() } catch (_: Exception) {}
@@ -583,6 +589,7 @@ html_text = target.read_text(encoding="utf-8")
 checks = {
     "Porcupine dependency": "porcupine-android" in gradle_text,
     "wake service": "PorcupineManager" in wake_text and "ACTION_RESUME_WAKE" in wake_text and "override fun onStartCommand" in wake_text,
+    "Porcupine optional/manual mic independent": "if (accessKey.isBlank()) {" in wake_text and "stopSelf()" in wake_text and "if (manager != null) return" in wake_text,
     "single Porcupine start": "startForeground(701, notification())\n    }" in wake_text and wake_text.count("\n        startWakeWord()\n") == 1,
     "legacy wake entry disabled": "private fun startWakeListening() {\n        restartWakeListening()\n    }" in main_text,
     "wake resumes Porcupine": "setAction(JarvisWakeService.ACTION_RESUME_WAKE)" in main_text,
