@@ -165,9 +165,14 @@ if start < 0: raise SystemExit("startWakeListening not found")
 nxt = s.find("\n    private fun ", start + 5)
 s = s[:start] + """    private fun startWakeListening() {
         if (isSpeaking) return
+        if (speechRecognizer == null) setupSpeechRecognizer()
+        if (speechRecognizer == null) return
+        try { speechRecognizer?.cancel() } catch (_: Exception) {}
         wakeListening = false
-        manualListening = true
-        startConversationListening(30_000)
+        manualListening = false
+        mainHandler.postDelayed({
+            if (!isSpeaking) startConversationListening(30_000)
+        }, 350)
     }
 """ + s[nxt:]
 m.write_text(s, encoding="utf-8")
@@ -178,7 +183,7 @@ print("Keyless microphone mode enabled: Picovoice removed")
 # Fail fast on keyless microphone behavior.
 main_text = m.read_text(encoding="utf-8")
 checks = {
-    "keyless microphone": "startConversationListening(30_000)" in main_text,
+    "keyless microphone": "if (speechRecognizer == null) setupSpeechRecognizer()" in main_text and "startConversationListening(30_000)" in main_text,
     "no Picovoice bridge": "setPicovoiceAccessKey" not in main_text,
 }
 failed = [name for name, ok in checks.items() if not ok]
