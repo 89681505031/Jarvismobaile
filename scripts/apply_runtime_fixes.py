@@ -177,6 +177,65 @@ s = s[:start] + """    private fun startWakeListening() {
 """ + s[nxt:]
 m.write_text(s, encoding="utf-8")
 
+# Ensure Android microphone permission is requested before SpeechRecognizer starts.
+m = src / "MainActivity.kt"
+u = m.read_text(encoding="utf-8")
+if "private fun ensureMicrophonePermission()" not in u:
+    insert_at = u.find("    private fun startWakeListening() {")
+    if insert_at < 0: raise SystemExit("startWakeListening missing for permission patch")
+    helper = """    private fun ensureMicrophonePermission(): Boolean {
+        if (android.os.Build.VERSION.SDK_INT < 23 ||
+            checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) ==
+                android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            return true
+        }
+        requestPermissions(arrayOf(android.Manifest.permission.RECORD_AUDIO), 7011)
+        return false
+    }
+
+"""
+    u = u[:insert_at] + helper + u[insert_at:]
+
+needle = """    private fun startWakeListening() {
+        if (isSpeaking) return
+"""
+replacement = """    private fun startWakeListening() {
+        if (isSpeaking) return
+        if (!ensureMicrophonePermission()) return
+"""
+if needle not in u: raise SystemExit("startWakeListening permission anchor missing")
+u = u.replace(needle, replacement, 1)
+
+# Re-enter microphone startup immediately after the user grants RECORD_AUDIO.
+if "requestCode == 7011" not in u:
+    last = u.rfind("\n}")
+    callback = """
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == 7011 &&
+            grantResults.firstOrNull() == android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            mainHandler.postDelayed({ startWakeListening() }, 250)
+        }
+    }
+"""
+    u = u[:last] + callback + u[last:]
+m.write_text(u, encoding="utf-8")
+
+# Ensure the permission is declared even if the archived manifest did not contain it.
+manifest = app / "src/main/AndroidManifest.xml"
+x = manifest.read_text(encoding="utf-8")
+perm = '<uses-permission android:name="android.permission.RECORD_AUDIO" />'
+if perm not in x:
+    x = x.replace("<manifest", "<manifest", 1)
+    close = x.find(">")
+    x = x[:close + 1] + "\n    " + perm + x[close + 1:]
+    manifest.write_text(x, encoding="utf-8")
+print("Microphone permission gate enabled")
+
 # No Picovoice dependency, service or settings are added.
 print("Keyless microphone mode enabled: Picovoice removed")
 
@@ -185,6 +244,7 @@ main_text = m.read_text(encoding="utf-8")
 checks = {
     "keyless microphone": "if (speechRecognizer == null) setupSpeechRecognizer()" in main_text and "startConversationListening(30_000)" in main_text,
     "no Picovoice bridge": "setPicovoiceAccessKey" not in main_text,
+    "microphone permission": "ensureMicrophonePermission()" in main_text and "requestCode == 7011" in main_text,
 }
 failed = [name for name, ok in checks.items() if not ok]
 if failed:
