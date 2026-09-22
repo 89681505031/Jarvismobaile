@@ -326,5 +326,9 @@
 +    }
 +
      private fun restart() {
+         // Avoid rapid stop/start loops that make Android's microphone indicator blink.
+         // Give the recognizer time to fully release the audio input before starting again.
          recognizer?.cancel()
-         android.os.Handler(mainLooper).postDelayed({ startRecognition() }, 350)
+         android.os.Handler(mainLooper).postDelayed({
+             if (recognizer != null) startRecognition()
+         }, 1200)
