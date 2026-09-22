@@ -425,7 +425,7 @@ if "fun setPicovoiceAccessKey(" not in s:
         # Fall back to the first existing JavascriptInterface method; API names vary between source revisions.
         pos = s.find("@JavascriptInterface")
         if pos >= 0:
-            pos = s.rfind("\\n", 0, pos) + 1
+            pos = s.rfind("\n", 0, pos) + 1
     if pos < 0:
         raise SystemExit("Could not locate any MainActivity JavascriptInterface method")
     bridge = r'''    @JavascriptInterface
