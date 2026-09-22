@@ -504,6 +504,7 @@ checks = {
     "wake service": "PorcupineManager" in wake_text and "ACTION_RESUME_WAKE" in wake_text and "override fun onStartCommand" in wake_text,
     "wake releases microphone": "manager?.stop()" in wake_text and "manager?.delete()" in wake_text and "manager = null" in wake_text,
     "wake receiver": "jarvisWakeReceiver" in main_text and "startConversationListening(30_000)" in main_text,
+    "30s after TTS": "conversationUntil = System.currentTimeMillis() + conversationResumeDurationMs" in main_text and "startConversationListening(conversationResumeDurationMs)" in main_text,
     "Picovoice bridge": "setPicovoiceAccessKey" in main_text and "AndroidJarvis.setPicovoiceAccessKey" in html_text,
     "microphone FGS permission": "android.permission.FOREGROUND_SERVICE_MICROPHONE" in manifest_text,
     "microphone FGS type": 'android:foregroundServiceType="microphone"' in manifest_text,
