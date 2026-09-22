@@ -106,4 +106,23 @@ if needle not in s:
     raise SystemExit("JarvisWakeService onCreate pattern not found")
 w.write_text(s.replace(needle, replacement, 1), encoding="utf-8")
 
-print("Applied GigaChat scope fallback and disabled background recognizer startup")
+# MainActivity also had its own automatic wake-listening loop. Disable only the
+# automatic restart function; manual microphone startConversationListening stays intact.
+m = root / "MainActivity.kt"
+s = m.read_text(encoding="utf-8")
+start = s.find("    private fun restartWakeListening() {")
+if start < 0:
+    raise SystemExit("MainActivity restartWakeListening function not found")
+next_fun = s.find("\n    private fun ", start + 5)
+if next_fun < 0:
+    raise SystemExit("Could not find end of restartWakeListening")
+replacement = """    private fun restartWakeListening() {
+        // Automatic SpeechRecognizer wake loop disabled. SpeechRecognizer is session-based
+        // and Android does not support using it as a continuous hotword listener.
+        wakeListening = false
+    }
+"""
+s = s[:start] + replacement + s[next_fun:]
+m.write_text(s, encoding="utf-8")
+
+print("Applied GigaChat scope fallback and disabled all automatic SpeechRecognizer wake loops")
