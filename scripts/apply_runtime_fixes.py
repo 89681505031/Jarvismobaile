@@ -185,3 +185,28 @@ failed = [name for name, ok in checks.items() if not ok]
 if failed:
     raise SystemExit("Runtime fix verification failed: " + ", ".join(failed))
 print("Runtime fix verification passed")
+
+# Disable the archived in-app updater. It points at an obsolete 0.2.147 release and
+# cannot safely install CI APKs until a persistent signing key/release channel exists.
+m = Path("mobile/android/app/src/main/java/com/jarvis/phone/MainActivity.kt")
+u = m.read_text(encoding="utf-8")
+for name in ("checkForUpdates", "checkForUpdate"):
+    sig = "    private fun " + name + "("
+    pos = u.find(sig)
+    if pos >= 0:
+        brace = u.find("{", pos)
+        depth = 0
+        end = -1
+        for i in range(brace, len(u)):
+            if u[i] == "{": depth += 1
+            elif u[i] == "}":
+                depth -= 1
+                if depth == 0:
+                    end = i + 1
+                    break
+        if end > 0:
+            header = u[pos:brace + 1]
+            u = u[:pos] + header + "\n        // Legacy 0.2.147 updater disabled; use signed release channel only.\n        return\n    }" + u[end:]
+m.write_text(u, encoding="utf-8")
+print("Disabled obsolete in-app update prompt until signed releases are configured")
+
