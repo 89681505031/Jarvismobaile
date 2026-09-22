@@ -59,7 +59,7 @@
                      error == SpeechRecognizer.ERROR_RECOGNIZER_BUSY
 @@ -153,32 +178,104 @@
  
-                 restartWakeListening()
+                 /* auto wake restart disabled */
              }
 +
              override fun onResults(results: Bundle?) {
@@ -70,7 +70,7 @@
 -                conversationUntil = 0L
 -                val text = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull()?.trim().orEmpty()
 -                if (text.isBlank()) {
--                    restartWakeListening()
+-                    /* auto wake restart disabled */
 -                    return
 -                }
 -                val escaped = JSONObject.quote(text)
@@ -80,7 +80,7 @@
 -                    }
 -                    mainHandler.postDelayed({
 -                        if (!isSpeaking && conversationUntil <= System.currentTimeMillis() && !manualListening) {
--                            restartWakeListening()
+-                            /* auto wake restart disabled */
 -                        }
 -                    }, if (wasConversation) 650L else 350L)
 -                }
@@ -136,7 +136,7 @@
 +        conversationUntil = 0L
 +        val clean = text.trim()
 +        if (clean.isBlank()) {
-+            restartWakeListening()
++            /* auto wake restart disabled */
 +            return
 +        }
 +
@@ -150,7 +150,7 @@
 +            }
 +            mainHandler.postDelayed({
 +                if (!isSpeaking && conversationUntil <= System.currentTimeMillis() && !manualListening) {
-+                    restartWakeListening()
++                    /* auto wake restart disabled */
 +                }
 +            }, if (wasConversation) 650L else 350L)
 +        }
