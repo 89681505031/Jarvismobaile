@@ -520,6 +520,22 @@ print("Added Picovoice AccessKey field to WebView settings")
 
 
 
+# Keep the first stable wake-word implementation foreground-only. The original
+# Activity cancels SpeechRecognizer in onPause; stop Porcupine there as well so a
+# background wake cannot consume the keyword while the ACTION_WAKE receiver is absent.
+m = src / "MainActivity.kt"
+s = m.read_text(encoding="utf-8")
+pause_anchor = """        speechRecognizer?.cancel()
+        runOnUiThread {"""
+pause_replacement = """        speechRecognizer?.cancel()
+        try { stopService(Intent(this, JarvisWakeService::class.java)) } catch (_: Exception) {}
+        runOnUiThread {"""
+if pause_anchor not in s:
+    raise SystemExit("MainActivity onPause microphone cleanup anchor not found")
+s = s.replace(pause_anchor, pause_replacement, 1)
+m.write_text(s, encoding="utf-8")
+print("Stopped Porcupine while Activity is paused")
+
 # Fail fast if any critical runtime edit did not actually land.
 main_text = m.read_text(encoding="utf-8")
 manifest_text = manifest.read_text(encoding="utf-8")
@@ -538,6 +554,7 @@ checks = {
     "Picovoice bridge": "setPicovoiceAccessKey" in main_text and "AndroidJarvis.setPicovoiceAccessKey" in html_text,
     "microphone FGS permission": "android.permission.FOREGROUND_SERVICE_MICROPHONE" in manifest_text,
     "microphone FGS type": 'android:foregroundServiceType="microphone"' in manifest_text,
+    "foreground-only wake lifecycle": "stopService(Intent(this, JarvisWakeService::class.java))" in main_text,
 }
 failed = [name for name, ok in checks.items() if not ok]
 if failed:
