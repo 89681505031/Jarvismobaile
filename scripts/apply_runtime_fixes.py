@@ -358,7 +358,10 @@ print("Installed Porcupine JARVIS wake-word service, ACTION_WAKE receiver, and 3
 # microphone foreground service on modern Android.
 m = src / "MainActivity.kt"
 s = m.read_text(encoding="utf-8")
-s = s.replace("private val conversationResumeDurationMs = 12_000L", "private val conversationResumeDurationMs = 30_000L")
+tts_duration_old = "private val conversationResumeDurationMs = 12_000L"
+if s.count(tts_duration_old) != 1:
+    raise SystemExit(f"Expected exactly one TTS conversation duration, found {s.count(tts_duration_old)}")
+s = s.replace(tts_duration_old, "private val conversationResumeDurationMs = 30_000L", 1)
 # At TTS start, close the command recognizer and invalidate the old deadline.
 # A fresh 30-second deadline is created only after speech finishes.
 s = s.replace(
@@ -372,8 +375,11 @@ s = s.replace(
 """,
     1
 )
+tts_resume_old = "                startConversationListening(conversationResumeDurationMs)"
+if s.count(tts_resume_old) != 1:
+    raise SystemExit(f"Expected exactly one post-TTS conversation resume, found {s.count(tts_resume_old)}")
 s = s.replace(
-    "                startConversationListening(conversationResumeDurationMs)",
+    tts_resume_old,
     """                conversationUntil = System.currentTimeMillis() + conversationResumeDurationMs
                 startConversationListening(conversationResumeDurationMs)""",
     1
