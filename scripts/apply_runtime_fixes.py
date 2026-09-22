@@ -231,5 +231,77 @@ s = s.replace("startConversationListening(10_000)", "startConversationListening(
 # Preserve the 30-second window when a result is delivered; do not zero it immediately.
 s = s.replace("        conversationUntil = 0L\n        val clean = text.trim()", "        if (wasConversation) conversationUntil = System.currentTimeMillis() + 30_000L\n        val clean = text.trim()")
 m.write_text(s, encoding="utf-8")
-print("Installed Porcupine JARVIS wake-word service and 30-second conversation window")
+
+# Wire the wake-word broadcast into MainActivity. This is applied by text patterns so
+# the source archive can remain unchanged in Git while we iterate.
+s = m.read_text(encoding="utf-8")
+if "jarvisWakeReceiver" not in s:
+    # Add imports only when the source uses explicit imports.
+    if "import android.content.BroadcastReceiver" not in s:
+        s = s.replace("import android.content.", "import android.content.BroadcastReceiver\nimport android.content.IntentFilter\nimport android.content.", 1)
+
+    class_pos = s.find("class MainActivity")
+    brace = s.find("{", class_pos)
+    receiver = r'''
+    private val jarvisWakeReceiver = object : android.content.BroadcastReceiver() {
+        override fun onReceive(context: android.content.Context?, intent: Intent?) {
+            if (intent?.action != JarvisWakeService.ACTION_WAKE) return
+            // Porcupine stops itself before broadcasting. Give AudioRecord a moment to
+            // release the microphone, then start normal command recognition.
+            conversationUntil = System.currentTimeMillis() + 30_000L
+            mainHandler.postDelayed({
+                if (!isSpeaking) startConversationListening(30_000)
+            }, 250L)
+        }
+    }
+
+'''
+    s = s[:brace+1] + receiver + s[brace+1:]
+
+    # Register/unregister receiver using lifecycle hooks. Prefer existing onResume/onPause.
+    resume = s.find("override fun onResume()")
+    if resume >= 0:
+        body = s.find("{", resume)
+        s = s[:body+1] + r'''
+        val wakeFilter = IntentFilter(JarvisWakeService.ACTION_WAKE)
+        if (android.os.Build.VERSION.SDK_INT >= 33) {
+            registerReceiver(jarvisWakeReceiver, wakeFilter, RECEIVER_NOT_EXPORTED)
+        } else {
+            @Suppress("DEPRECATION")
+            registerReceiver(jarvisWakeReceiver, wakeFilter)
+        }
+''' + s[body+1:]
+    else:
+        # Insert before onDestroy if no onResume exists.
+        od = s.find("    override fun onDestroy()")
+        if od < 0: raise SystemExit("MainActivity lifecycle insertion point not found")
+        lifecycle = r'''    override fun onResume() {
+        super.onResume()
+        val wakeFilter = IntentFilter(JarvisWakeService.ACTION_WAKE)
+        if (android.os.Build.VERSION.SDK_INT >= 33) {
+            registerReceiver(jarvisWakeReceiver, wakeFilter, RECEIVER_NOT_EXPORTED)
+        } else {
+            @Suppress("DEPRECATION")
+            registerReceiver(jarvisWakeReceiver, wakeFilter)
+        }
+    }
+
+    override fun onPause() {
+        try { unregisterReceiver(jarvisWakeReceiver) } catch (_: Exception) {}
+        super.onPause()
+    }
+
+'''
+        s = s[:od] + lifecycle + s[od:]
+
+    # If onPause already existed before insertion, ensure receiver is unregistered.
+    pause = s.find("override fun onPause()")
+    if pause >= 0:
+        body = s.find("{", pause)
+        segment = s[body:body+500]
+        if "unregisterReceiver(jarvisWakeReceiver)" not in segment:
+            s = s[:body+1] + '\n        try { unregisterReceiver(jarvisWakeReceiver) } catch (_: Exception) {}' + s[body+1:]
+
+m.write_text(s, encoding="utf-8")
+print("Installed Porcupine JARVIS wake-word service, ACTION_WAKE receiver, and 30-second conversation window")
 
