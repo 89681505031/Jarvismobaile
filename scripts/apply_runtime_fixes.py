@@ -279,10 +279,10 @@ if s.count(conversation_old) != 1:
 s = s.replace(conversation_old, "startConversationListening(30_000)", 1)
 
 # Preserve the 30-second window when a result is delivered; do not zero it immediately.
-deadline_old = "        conversationUntil = 0L\\n        val clean = text.trim()"
+deadline_old = "        conversationUntil = 0L\n        val clean = text.trim()"
 if s.count(deadline_old) != 1:
     raise SystemExit(f"Expected exactly one speech-result deadline reset, found {s.count(deadline_old)}")
-s = s.replace(deadline_old, "        if (wasConversation) conversationUntil = System.currentTimeMillis() + 30_000L\\n        val clean = text.trim()", 1)
+s = s.replace(deadline_old, "        if (wasConversation) conversationUntil = System.currentTimeMillis() + 30_000L\n        val clean = text.trim()", 1)
 m.write_text(s, encoding="utf-8")
 
 # Wire the wake-word broadcast into MainActivity. This is applied by text patterns so
