@@ -356,11 +356,19 @@ m.write_text(s, encoding="utf-8")
 manifest = app / "src/main/AndroidManifest.xml"
 s = manifest.read_text(encoding="utf-8")
 if "android.permission.FOREGROUND_SERVICE_MICROPHONE" not in s:
-    s = s.replace(
-        '<uses-permission android:name="android.permission.FOREGROUND_SERVICE" />',
-        '<uses-permission android:name="android.permission.FOREGROUND_SERVICE" />\n    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />'
-    )
-if 'android:name=".JarvisWakeService"' not in s:
+    permission = '    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />\n'
+    app_pos = s.find("<application")
+    if app_pos < 0: raise SystemExit("AndroidManifest application tag not found")
+    s = s[:app_pos] + permission + s[app_pos:]
+if 'android:name=".JarvisWakeService"' in s:
+    import re
+    def ensure_mic_type(match):
+        tag = match.group(0)
+        if "foregroundServiceType" in tag:
+            return re.sub(r'android:foregroundServiceType="[^"]*"', 'android:foregroundServiceType="microphone"', tag)
+        return tag[:-1] + ' android:foregroundServiceType="microphone">'
+    s = re.sub(r'<service\b[^>]*android:name="\.JarvisWakeService"[^>]*>', ensure_mic_type, s, count=1)
+else:
     service = '        <service android:name=".JarvisWakeService" android:exported="false" android:foregroundServiceType="microphone" />\n'
     s = s.replace("    </application>", service + "    </application>")
 manifest.write_text(s, encoding="utf-8")
