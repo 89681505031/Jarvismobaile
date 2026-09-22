@@ -519,7 +519,7 @@ html_text = target.read_text(encoding="utf-8")
 checks = {
     "Porcupine dependency": "porcupine-android" in gradle_text,
     "wake service": "PorcupineManager" in wake_text and "ACTION_RESUME_WAKE" in wake_text and "override fun onStartCommand" in wake_text,
-    "single Porcupine start": "startForeground(701, notification())\n    }" in wake_text and wake_text.count("startWakeWord()") == 1,
+    "single Porcupine start": "startForeground(701, notification())\n    }" in wake_text and wake_text.count("\n        startWakeWord()\n") == 1,
     "legacy wake entry disabled": "private fun startWakeListening() {\n        restartWakeListening()\n    }" in main_text,
     "wake resumes Porcupine": "setAction(JarvisWakeService.ACTION_RESUME_WAKE)" in main_text,
     "wake releases microphone": "manager?.stop()" in wake_text and "manager?.delete()" in wake_text and "manager = null" in wake_text,
