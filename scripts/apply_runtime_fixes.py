@@ -178,7 +178,6 @@ class JarvisWakeService : Service() {
         super.onCreate()
         createChannel()
         startForeground(701, notification())
-        startWakeWord()
     }
 
     private fun startWakeWord() {
@@ -212,7 +211,9 @@ class JarvisWakeService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        if (intent?.action == ACTION_RESUME_WAKE) startWakeWord()
+        // onCreate must not start Porcupine too: a newly started service receives
+        // onCreate followed by onStartCommand, which otherwise opens the mic twice.
+        startWakeWord()
         return START_STICKY
     }
 
