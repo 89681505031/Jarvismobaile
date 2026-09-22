@@ -195,7 +195,11 @@ class JarvisWakeService : Service() {
                     try { manager?.stop() } catch (_: Exception) {}
                     try { manager?.delete() } catch (_: Exception) {}
                     manager = null
-                    sendBroadcast(Intent(ACTION_WAKE).setPackage(packageName).putExtra("text", "jarvis"))
+                    // Give Android's audio stack a short handoff interval after Porcupine
+                    // releases AudioRecord before SpeechRecognizer opens the microphone.
+                    android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                        sendBroadcast(Intent(ACTION_WAKE).setPackage(packageName).putExtra("text", "jarvis"))
+                    }, 150L)
                 }
             manager?.start()
         } catch (_: Exception) {
@@ -300,7 +304,7 @@ if "jarvisWakeReceiver" not in s:
             conversationUntil = System.currentTimeMillis() + 30_000L
             mainHandler.postDelayed({
                 if (!isSpeaking) startConversationListening(30_000)
-            }, 250L)
+            }, 150L)
         }
     }
 
@@ -575,6 +579,7 @@ checks = {
     "legacy wake entry disabled": "private fun startWakeListening() {\n        restartWakeListening()\n    }" in main_text,
     "wake resumes Porcupine": "setAction(JarvisWakeService.ACTION_RESUME_WAKE)" in main_text,
     "wake releases microphone": "manager?.stop()" in wake_text and "manager?.delete()" in wake_text and "manager = null" in wake_text,
+    "wake audio handoff": "postDelayed({" in wake_text and "}, 150L)" in wake_text,
     "wake receiver": "jarvisWakeReceiver" in main_text and "startConversationListening(30_000)" in main_text,
     "30s after TTS": "conversationUntil = System.currentTimeMillis() + conversationResumeDurationMs" in main_text and "startConversationListening(conversationResumeDurationMs)" in main_text,
     "Picovoice bridge": "setPicovoiceAccessKey" in main_text and "AndroidJarvis.setPicovoiceAccessKey" in html_text,
