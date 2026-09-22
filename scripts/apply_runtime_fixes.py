@@ -170,12 +170,16 @@ class JarvisWakeService : Service() {
             .getString("picovoice_access_key", "").orEmpty().trim()
         if (accessKey.isBlank()) return
         try {
-            manager?.delete()
+            try { manager?.stop() } catch (_: Exception) {}
+            try { manager?.delete() } catch (_: Exception) {}
+            manager = null
             manager = PorcupineManager.Builder()
                 .setAccessKey(accessKey)
                 .setKeyword(Porcupine.BuiltInKeyword.JARVIS)
                 .build(this) {
                     try { manager?.stop() } catch (_: Exception) {}
+                    try { manager?.delete() } catch (_: Exception) {}
+                    manager = null
                     sendBroadcast(Intent(ACTION_WAKE).setPackage(packageName).putExtra("text", "jarvis"))
                 }
             manager?.start()
