@@ -415,14 +415,20 @@ if "fun setPicovoiceAccessKey(" not in s:
         // Restart only our wake service so it reloads the new key.
         try { stopService(Intent(this@MainActivity, JarvisWakeService::class.java)) } catch (_: Exception) {}
         if (clean.isNotBlank()) {
-            try {
-                androidx.core.content.ContextCompat.startForegroundService(
-                    this@MainActivity,
-                    Intent(this@MainActivity, JarvisWakeService::class.java)
-                )
-            } catch (_: Exception) {}
+            val micGranted = androidx.core.content.ContextCompat.checkSelfPermission(
+                this@MainActivity, android.Manifest.permission.RECORD_AUDIO
+            ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+            if (micGranted) {
+                try {
+                    androidx.core.content.ContextCompat.startForegroundService(
+                        this@MainActivity,
+                        Intent(this@MainActivity, JarvisWakeService::class.java)
+                    )
+                } catch (_: Exception) {}
+            }
+            return if (micGranted) "Picovoice: ключ сохранён" else "Picovoice: ключ сохранён — разрешите микрофон"
         }
-        return if (clean.isBlank()) "Picovoice: ключ удалён" else "Picovoice: ключ сохранён"
+        return "Picovoice: ключ удалён"
     }
 
     @JavascriptInterface
@@ -552,6 +558,7 @@ checks = {
     "wake receiver": "jarvisWakeReceiver" in main_text and "startConversationListening(30_000)" in main_text,
     "30s after TTS": "conversationUntil = System.currentTimeMillis() + conversationResumeDurationMs" in main_text and "startConversationListening(conversationResumeDurationMs)" in main_text,
     "Picovoice bridge": "setPicovoiceAccessKey" in main_text and "AndroidJarvis.setPicovoiceAccessKey" in html_text,
+    "Picovoice permission guard": "val micGranted = androidx.core.content.ContextCompat.checkSelfPermission" in main_text,
     "microphone FGS permission": "android.permission.FOREGROUND_SERVICE_MICROPHONE" in manifest_text,
     "microphone FGS type": 'android:foregroundServiceType="microphone"' in manifest_text,
     "foreground-only wake lifecycle": "stopService(Intent(this, JarvisWakeService::class.java))" in main_text,
