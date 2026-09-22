@@ -531,14 +531,20 @@ print("Added Picovoice AccessKey field to WebView settings")
 # background wake cannot consume the keyword while the ACTION_WAKE receiver is absent.
 m = src / "MainActivity.kt"
 s = m.read_text(encoding="utf-8")
-pause_anchor = """        speechRecognizer?.cancel()
-        runOnUiThread {"""
+pause_pos = s.find("override fun onPause()")
+if pause_pos < 0:
+    raise SystemExit("MainActivity onPause not found")
+pause_end = s.find("\n    override fun ", pause_pos + 5)
+if pause_end < 0:
+    pause_end = len(s)
+pause_block = s[pause_pos:pause_end]
+pause_anchor = "        speechRecognizer?.cancel()"
 pause_replacement = """        speechRecognizer?.cancel()
-        try { stopService(Intent(this, JarvisWakeService::class.java)) } catch (_: Exception) {}
-        runOnUiThread {"""
-if pause_anchor not in s:
+        try { stopService(Intent(this, JarvisWakeService::class.java)) } catch (_: Exception) {}"""
+if pause_anchor not in pause_block:
     raise SystemExit("MainActivity onPause microphone cleanup anchor not found")
-s = s.replace(pause_anchor, pause_replacement, 1)
+pause_block = pause_block.replace(pause_anchor, pause_replacement, 1)
+s = s[:pause_pos] + pause_block + s[pause_end:]
 m.write_text(s, encoding="utf-8")
 print("Stopped Porcupine while Activity is paused")
 
@@ -561,7 +567,7 @@ checks = {
     "Picovoice permission guard": "val micGranted = androidx.core.content.ContextCompat.checkSelfPermission" in main_text,
     "microphone FGS permission": "android.permission.FOREGROUND_SERVICE_MICROPHONE" in manifest_text,
     "microphone FGS type": 'android:foregroundServiceType="microphone"' in manifest_text,
-    "foreground-only wake lifecycle": "stopService(Intent(this, JarvisWakeService::class.java))" in main_text,
+    "foreground-only wake lifecycle": "override fun onPause()" in main_text and "stopService(Intent(this, JarvisWakeService::class.java))" in main_text,
 }
 failed = [name for name, ok in checks.items() if not ok]
 if failed:
