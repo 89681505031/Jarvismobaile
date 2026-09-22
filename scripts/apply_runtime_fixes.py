@@ -475,3 +475,23 @@ document.addEventListener('DOMContentLoaded', refreshPicovoiceAccessKeyStatus);
 
 print("Added Picovoice AccessKey field to WebView settings")
 
+
+
+# Fail fast if any critical runtime edit did not actually land.
+main_text = m.read_text(encoding="utf-8")
+manifest_text = manifest.read_text(encoding="utf-8")
+gradle_text = gradle.read_text(encoding="utf-8")
+wake_text = wake.read_text(encoding="utf-8")
+html_text = target.read_text(encoding="utf-8")
+checks = {
+    "Porcupine dependency": "porcupine-android" in gradle_text,
+    "wake service": "PorcupineManager" in wake_text and "ACTION_RESUME_WAKE" in wake_text,
+    "wake receiver": "jarvisWakeReceiver" in main_text and "startConversationListening(30_000)" in main_text,
+    "Picovoice bridge": "setPicovoiceAccessKey" in main_text and "AndroidJarvis.setPicovoiceAccessKey" in html_text,
+    "microphone FGS permission": "android.permission.FOREGROUND_SERVICE_MICROPHONE" in manifest_text,
+    "microphone FGS type": 'android:foregroundServiceType="microphone"' in manifest_text,
+}
+failed = [name for name, ok in checks.items() if not ok]
+if failed:
+    raise SystemExit("Runtime fix verification failed: " + ", ".join(failed))
+print("Runtime fix verification passed")
