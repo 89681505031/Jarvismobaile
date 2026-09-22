@@ -405,3 +405,58 @@ if idx >= 0 and "JarvisWakeService::class.java" not in s[max(0, idx-300):idx+800
 m.write_text(s, encoding="utf-8")
 print("Added on-device Picovoice key bridge and wake-service startup")
 
+# Inject a Picovoice AccessKey field into the existing WebView settings page.
+# Locate the HTML dynamically because the archived project may use index.html or another asset name.
+assets = app / "src/main/assets"
+html_files = list(assets.rglob("*.html"))
+target = None
+for candidate in html_files:
+    txt = candidate.read_text(encoding="utf-8", errors="ignore")
+    if "setApiKeys" in txt or "gigachat" in txt.lower() or "fish" in txt.lower():
+        target = candidate
+        break
+if target is None:
+    raise SystemExit("Settings HTML not found in Android assets")
+
+h = target.read_text(encoding="utf-8")
+if "picovoiceAccessKey" not in h:
+    panel = r'''
+<div id="picovoiceAccessKeyBlock" style="margin-top:14px">
+  <label for="picovoiceAccessKey">Picovoice AccessKey — слово JARVIS</label>
+  <input id="picovoiceAccessKey" type="password" autocomplete="off"
+         placeholder="Вставьте AccessKey Picovoice" style="width:100%;box-sizing:border-box;margin-top:6px" />
+  <button type="button" onclick="savePicovoiceAccessKey()" style="margin-top:8px">Сохранить Picovoice AccessKey</button>
+  <div id="picovoiceAccessKeyStatus" style="margin-top:6px;font-size:12px;opacity:.75"></div>
+</div>
+<script>
+function savePicovoiceAccessKey() {
+  const el = document.getElementById('picovoiceAccessKey');
+  const status = document.getElementById('picovoiceAccessKeyStatus');
+  try {
+    const msg = window.Android && Android.setPicovoiceAccessKey
+      ? Android.setPicovoiceAccessKey((el && el.value) || '')
+      : 'Android bridge недоступен';
+    if (status) status.textContent = msg;
+    if (el) el.value = '';
+  } catch (e) {
+    if (status) status.textContent = 'Не удалось сохранить ключ';
+  }
+}
+function refreshPicovoiceAccessKeyStatus() {
+  const status = document.getElementById('picovoiceAccessKeyStatus');
+  try {
+    if (status && window.Android && Android.getPicovoiceKeyStatus)
+      status.textContent = 'Picovoice: ' + Android.getPicovoiceKeyStatus();
+  } catch (_) {}
+}
+document.addEventListener('DOMContentLoaded', refreshPicovoiceAccessKeyStatus);
+</script>
+'''
+    body = h.lower().rfind("</body>")
+    if body < 0:
+        raise SystemExit("Settings HTML has no </body>")
+    h = h[:body] + panel + h[body:]
+    target.write_text(h, encoding="utf-8")
+
+print("Added Picovoice AccessKey field to WebView settings")
+
