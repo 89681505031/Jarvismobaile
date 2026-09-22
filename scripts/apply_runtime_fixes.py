@@ -125,7 +125,9 @@ replacement = """    private fun restartWakeListening() {
 s = s[:start] + replacement + s[next_fun:]
 m.write_text(s, encoding="utf-8")
 
-print("Applied GigaChat scope fallback and disabled all automatic SpeechRecognizer wake loops")\n\nfrom pathlib import Path
+print("Applied GigaChat scope fallback and disabled all automatic SpeechRecognizer wake loops")
+
+from pathlib import Path
 root = Path("mobile/android")
 app = root / "app"
 gradle = app / "build.gradle.kts"
