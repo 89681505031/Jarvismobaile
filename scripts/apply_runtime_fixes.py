@@ -347,3 +347,61 @@ if 'android:name=".JarvisWakeService"' not in s:
 manifest.write_text(s, encoding="utf-8")
 print("Preserved conversation deadline across TTS and declared wake microphone service")
 
+# Picovoice AccessKey stays on the device. Expose a small JS bridge API so the
+# existing WebView settings page can save/check it without embedding secrets in Git.
+m = src / "MainActivity.kt"
+s = m.read_text(encoding="utf-8")
+if "fun setPicovoiceAccessKey(" not in s:
+    anchor = "    @JavascriptInterface\\n    fun getApiKeyStatus"
+    pos = s.find(anchor)
+    if pos < 0:
+        anchor = "    @JavascriptInterface\\n    fun setApiKeys"
+        pos = s.find(anchor)
+    if pos < 0:
+        raise SystemExit("Could not locate MainActivity JavascriptInterface settings bridge")
+    bridge = r'''    @JavascriptInterface
+    fun setPicovoiceAccessKey(key: String): String {
+        val clean = key.trim()
+        val editor = prefs.edit()
+        if (clean.isBlank()) editor.remove("picovoice_access_key")
+        else editor.putString("picovoice_access_key", clean)
+        editor.apply()
+        // Restart only our wake service so it reloads the new key.
+        try { stopService(Intent(this@MainActivity, JarvisWakeService::class.java)) } catch (_: Exception) {}
+        if (clean.isNotBlank()) {
+            try {
+                androidx.core.content.ContextCompat.startForegroundService(
+                    this@MainActivity,
+                    Intent(this@MainActivity, JarvisWakeService::class.java)
+                )
+            } catch (_: Exception) {}
+        }
+        return if (clean.isBlank()) "Picovoice: ключ удалён" else "Picovoice: ключ сохранён"
+    }
+
+    @JavascriptInterface
+    fun getPicovoiceKeyStatus(): String =
+        if (prefs.getString("picovoice_access_key", "").orEmpty().isBlank()) "не задан" else "сохранён"
+
+'''
+    s = s[:pos] + bridge + s[pos:]
+
+# Start the wake service once audio permission is already available. This does not
+# expose the AccessKey and the service itself remains idle when no key is stored.
+needle = "setupSpeechRecognizer()"
+idx = s.find(needle)
+if idx >= 0 and "JarvisWakeService::class.java" not in s[max(0, idx-300):idx+800]:
+    endline = s.find("\\n", idx)
+    startup = r'''
+        try {
+            androidx.core.content.ContextCompat.startForegroundService(
+                this,
+                Intent(this, JarvisWakeService::class.java)
+            )
+        } catch (_: Exception) {}
+'''
+    s = s[:endline+1] + startup + s[endline+1:]
+
+m.write_text(s, encoding="utf-8")
+print("Added on-device Picovoice key bridge and wake-service startup")
+
