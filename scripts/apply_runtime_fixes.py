@@ -498,7 +498,8 @@ wake_text = wake.read_text(encoding="utf-8")
 html_text = target.read_text(encoding="utf-8")
 checks = {
     "Porcupine dependency": "porcupine-android" in gradle_text,
-    "wake service": "PorcupineManager" in wake_text and "ACTION_RESUME_WAKE" in wake_text,
+    "wake service": "PorcupineManager" in wake_text and "ACTION_RESUME_WAKE" in wake_text and "override fun onStartCommand" in wake_text,
+    "wake releases microphone": "manager?.stop()" in wake_text and "manager?.delete()" in wake_text and "manager = null" in wake_text,
     "wake receiver": "jarvisWakeReceiver" in main_text and "startConversationListening(30_000)" in main_text,
     "Picovoice bridge": "setPicovoiceAccessKey" in main_text and "AndroidJarvis.setPicovoiceAccessKey" in html_text,
     "microphone FGS permission": "android.permission.FOREGROUND_SERVICE_MICROPHONE" in manifest_text,
