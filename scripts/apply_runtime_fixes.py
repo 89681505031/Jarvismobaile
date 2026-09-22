@@ -561,12 +561,15 @@ pause_end = s.find("\n    override fun ", pause_pos + 5)
 if pause_end < 0:
     pause_end = len(s)
 pause_block = s[pause_pos:pause_end]
-pause_anchor = "        speechRecognizer?.cancel()"
-pause_replacement = """        speechRecognizer?.cancel()
-        try { stopService(Intent(this, JarvisWakeService::class.java)) } catch (_: Exception) {}"""
-if pause_anchor not in pause_block:
-    raise SystemExit("MainActivity onPause microphone cleanup anchor not found")
-pause_block = pause_block.replace(pause_anchor, pause_replacement, 1)
+# Do not depend on the exact SpeechRecognizer cleanup text: source revisions use
+# cancel(), stopListening(), or destroy(). The lifecycle requirement is simply that
+# Porcupine is stopped before the Activity leaves the foreground.
+stop_line = "        try { stopService(Intent(this, JarvisWakeService::class.java)) } catch (_: Exception) {}"
+if "stopService(Intent(this, JarvisWakeService::class.java))" not in pause_block:
+    brace = pause_block.find("{")
+    if brace < 0:
+        raise SystemExit("MainActivity onPause body not found")
+    pause_block = pause_block[:brace + 1] + "\n" + stop_line + pause_block[brace + 1:]
 s = s[:pause_pos] + pause_block + s[pause_end:]
 m.write_text(s, encoding="utf-8")
 print("Stopped Porcupine while Activity is paused")
