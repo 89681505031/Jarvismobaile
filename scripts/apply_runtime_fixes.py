@@ -125,6 +125,22 @@ replacement = """    private fun restartWakeListening() {
 s = s[:start] + replacement + s[next_fun:]
 m.write_text(s, encoding="utf-8")
 
+# Replace the legacy SpeechRecognizer wake entry point too. onResume() calls
+# startWakeListening() directly, so leaving its old body would still contend with Porcupine.
+s = m.read_text(encoding="utf-8")
+start = s.find("    private fun startWakeListening() {")
+if start < 0:
+    raise SystemExit("MainActivity startWakeListening function not found")
+next_fun = s.find("\n    private fun ", start + 5)
+if next_fun < 0:
+    raise SystemExit("Could not find end of startWakeListening")
+replacement = """    private fun startWakeListening() {
+        restartWakeListening()
+    }
+"""
+s = s[:start] + replacement + s[next_fun:]
+m.write_text(s, encoding="utf-8")
+
 print("Applied GigaChat scope fallback and disabled all automatic SpeechRecognizer wake loops")
 
 from pathlib import Path
