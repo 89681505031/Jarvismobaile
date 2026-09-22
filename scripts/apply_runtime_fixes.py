@@ -448,8 +448,8 @@ function savePicovoiceAccessKey() {
   const el = document.getElementById('picovoiceAccessKey');
   const status = document.getElementById('picovoiceAccessKeyStatus');
   try {
-    const msg = window.Android && Android.setPicovoiceAccessKey
-      ? Android.setPicovoiceAccessKey((el && el.value) || '')
+    const msg = window.AndroidJarvis && AndroidJarvis.setPicovoiceAccessKey
+      ? AndroidJarvis.setPicovoiceAccessKey((el && el.value) || '')
       : 'Android bridge недоступен';
     if (status) status.textContent = msg;
     if (el) el.value = '';
@@ -460,8 +460,8 @@ function savePicovoiceAccessKey() {
 function refreshPicovoiceAccessKeyStatus() {
   const status = document.getElementById('picovoiceAccessKeyStatus');
   try {
-    if (status && window.Android && Android.getPicovoiceKeyStatus)
-      status.textContent = 'Picovoice: ' + Android.getPicovoiceKeyStatus();
+    if (status && window.AndroidJarvis && AndroidJarvis.getPicovoiceKeyStatus)
+      status.textContent = 'Picovoice: ' + AndroidJarvis.getPicovoiceKeyStatus();
   } catch (_) {}
 }
 document.addEventListener('DOMContentLoaded', refreshPicovoiceAccessKeyStatus);
