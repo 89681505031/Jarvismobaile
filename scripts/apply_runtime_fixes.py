@@ -452,6 +452,14 @@ if idx >= 0 and "JarvisWakeService::class.java" not in s[max(0, idx-300):idx+800
 '''
     s = s[:endline+1] + startup + s[endline+1:]
 
+# After the first RECORD_AUDIO grant, the original activity calls startWakeListening().
+# That function is rewritten below to resume Porcupine, so permission grant immediately
+# starts the wake-word service without creating another SpeechRecognizer loop.
+if "override fun onRequestPermissionsResult" not in s:
+    raise SystemExit("MainActivity permission result handler not found")
+if "mainHandler.postDelayed({ startWakeListening() }, 350)" not in s:
+    raise SystemExit("Microphone permission grant wake-start hook not found")
+
 m.write_text(s, encoding="utf-8")
 print("Added on-device Picovoice key bridge and wake-service startup")
 
