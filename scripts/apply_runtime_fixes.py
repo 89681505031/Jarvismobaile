@@ -125,4 +125,109 @@ replacement = """    private fun restartWakeListening() {
 s = s[:start] + replacement + s[next_fun:]
 m.write_text(s, encoding="utf-8")
 
-print("Applied GigaChat scope fallback and disabled all automatic SpeechRecognizer wake loops")
+print("Applied GigaChat scope fallback and disabled all automatic SpeechRecognizer wake loops")\n\nfrom pathlib import Path
+root = Path("mobile/android")
+app = root / "app"
+gradle = app / "build.gradle.kts"
+if not gradle.exists():
+    gradle = app / "build.gradle"
+s = gradle.read_text(encoding="utf-8")
+dep = 'implementation("ai.picovoice:porcupine-android:4.0.0")'
+if "porcupine-android" not in s:
+    pos = s.rfind("}")
+    # Insert into dependencies block, not the file's final brace.
+    d = s.find("dependencies {")
+    if d < 0: raise SystemExit("dependencies block not found")
+    end = s.find("\n}", d)
+    s = s[:end] + "\n    " + dep + s[end:]
+    gradle.write_text(s, encoding="utf-8")
+
+src = app / "src/main/java/com/jarvis/phone"
+wake = src / "JarvisWakeService.kt"
+wake.write_text(r'''package com.jarvis.phone
+
+import android.app.*
+import android.content.Intent
+import android.os.IBinder
+import ai.picovoice.porcupine.Porcupine
+import ai.picovoice.porcupine.PorcupineManager
+
+class JarvisWakeService : Service() {
+    private var manager: PorcupineManager? = null
+    private val channelId = "jarvis_wake_channel"
+
+    override fun onCreate() {
+        super.onCreate()
+        createChannel()
+        startForeground(701, notification())
+        startWakeWord()
+    }
+
+    private fun startWakeWord() {
+        val accessKey = getSharedPreferences("jarvis_settings", MODE_PRIVATE)
+            .getString("picovoice_access_key", "").orEmpty().trim()
+        if (accessKey.isBlank()) return
+        try {
+            manager?.delete()
+            manager = PorcupineManager.Builder()
+                .setAccessKey(accessKey)
+                .setKeyword(Porcupine.BuiltInKeyword.JARVIS)
+                .build(this) {
+                    try { manager?.stop() } catch (_: Exception) {}
+                    sendBroadcast(Intent(ACTION_WAKE).setPackage(packageName).putExtra("text", "jarvis"))
+                }
+            manager?.start()
+        } catch (_: Exception) {
+            manager = null
+        }
+    }
+
+    override fun onDestroy() {
+        try { manager?.stop() } catch (_: Exception) {}
+        try { manager?.delete() } catch (_: Exception) {}
+        manager = null
+        super.onDestroy()
+    }
+
+    override fun onBind(intent: Intent?): IBinder? = null
+
+    private fun createChannel() {
+        if (android.os.Build.VERSION.SDK_INT >= 26) {
+            getSystemService(NotificationManager::class.java).createNotificationChannel(
+                NotificationChannel(channelId, "J.A.R.V.I.S. wake word", NotificationManager.IMPORTANCE_LOW)
+            )
+        }
+    }
+
+    private fun notification(): Notification =
+        Notification.Builder(this, channelId)
+            .setContentTitle("J.A.R.V.I.S.")
+            .setContentText("Ожидаю слово «Джарвис»")
+            .setSmallIcon(android.R.drawable.ic_btn_speak_now)
+            .build()
+
+    companion object { const val ACTION_WAKE = "com.jarvis.phone.ACTION_WAKE" }
+}
+''', encoding="utf-8")
+
+m = src / "MainActivity.kt"
+s = m.read_text(encoding="utf-8")
+# Restore automatic transition only while a conversation window is active; never restart wake SpeechRecognizer.
+start = s.find("    private fun restartWakeListening() {")
+if start >= 0:
+    nxt = s.find("\n    private fun ", start + 5)
+    if nxt < 0: raise SystemExit("restartWakeListening end not found")
+    repl = '''    private fun restartWakeListening() {
+        wakeListening = false
+        // Wake-word listening is handled by JarvisWakeService/Porcupine.
+    }
+'''
+    s = s[:start] + repl + s[nxt:]
+
+# Make the normal conversation window 30 seconds wherever the old default 10 seconds is used.
+s = s.replace("startConversationListening(10_000)", "startConversationListening(30_000)")
+# Preserve the 30-second window when a result is delivered; do not zero it immediately.
+s = s.replace("        conversationUntil = 0L\n        val clean = text.trim()", "        if (wasConversation) conversationUntil = System.currentTimeMillis() + 30_000L\n        val clean = text.trim()")
+m.write_text(s, encoding="utf-8")
+print("Installed Porcupine JARVIS wake-word service and 30-second conversation window")
+
