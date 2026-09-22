@@ -354,10 +354,10 @@ s = manifest.read_text(encoding="utf-8")
 if "android.permission.FOREGROUND_SERVICE_MICROPHONE" not in s:
     s = s.replace(
         '<uses-permission android:name="android.permission.FOREGROUND_SERVICE" />',
-        '<uses-permission android:name="android.permission.FOREGROUND_SERVICE" />\\n    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />'
+        '<uses-permission android:name="android.permission.FOREGROUND_SERVICE" />\n    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />'
     )
 if 'android:name=".JarvisWakeService"' not in s:
-    service = '        <service android:name=".JarvisWakeService" android:exported="false" android:foregroundServiceType="microphone" />\\n'
+    service = '        <service android:name=".JarvisWakeService" android:exported="false" android:foregroundServiceType="microphone" />\n'
     s = s.replace("    </application>", service + "    </application>")
 manifest.write_text(s, encoding="utf-8")
 print("Preserved conversation deadline across TTS and declared wake microphone service")
