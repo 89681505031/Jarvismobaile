@@ -208,7 +208,10 @@ class JarvisWakeService : Service() {
             .setSmallIcon(android.R.drawable.ic_btn_speak_now)
             .build()
 
-    companion object { const val ACTION_WAKE = "com.jarvis.phone.ACTION_WAKE" }
+    companion object {
+        const val ACTION_WAKE = "com.jarvis.phone.ACTION_WAKE"
+        const val ACTION_RESUME_WAKE = "com.jarvis.phone.ACTION_RESUME_WAKE"
+    }
 }
 ''', encoding="utf-8")
 
@@ -220,8 +223,20 @@ if start >= 0:
     nxt = s.find("\n    private fun ", start + 5)
     if nxt < 0: raise SystemExit("restartWakeListening end not found")
     repl = '''    private fun restartWakeListening() {
+        if (isSpeaking) return
+        if (conversationUntil > System.currentTimeMillis()) {
+            restartConversationListening()
+            return
+        }
+        conversationUntil = 0L
         wakeListening = false
-        // Wake-word listening is handled by JarvisWakeService/Porcupine.
+        manualListening = false
+        try {
+            startService(
+                Intent(this, JarvisWakeService::class.java)
+                    .setAction(JarvisWakeService.ACTION_RESUME_WAKE)
+            )
+        } catch (_: Exception) {}
     }
 '''
     s = s[:start] + repl + s[nxt:]
