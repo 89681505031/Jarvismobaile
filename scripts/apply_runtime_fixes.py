@@ -267,10 +267,18 @@ if start >= 0:
 '''
     s = s[:start] + repl + s[nxt:]
 
-# Make the normal conversation window 30 seconds wherever the old default 10 seconds is used.
-s = s.replace("startConversationListening(10_000)", "startConversationListening(30_000)")
+# Make the normal conversation window 30 seconds. Fail if the expected archived source
+# changed, rather than silently producing a build with the old timeout.
+conversation_old = "startConversationListening(10_000)"
+if s.count(conversation_old) != 1:
+    raise SystemExit(f"Expected exactly one 10-second conversation start, found {s.count(conversation_old)}")
+s = s.replace(conversation_old, "startConversationListening(30_000)", 1)
+
 # Preserve the 30-second window when a result is delivered; do not zero it immediately.
-s = s.replace("        conversationUntil = 0L\n        val clean = text.trim()", "        if (wasConversation) conversationUntil = System.currentTimeMillis() + 30_000L\n        val clean = text.trim()")
+deadline_old = "        conversationUntil = 0L\\n        val clean = text.trim()"
+if s.count(deadline_old) != 1:
+    raise SystemExit(f"Expected exactly one speech-result deadline reset, found {s.count(deadline_old)}")
+s = s.replace(deadline_old, "        if (wasConversation) conversationUntil = System.currentTimeMillis() + 30_000L\\n        val clean = text.trim()", 1)
 m.write_text(s, encoding="utf-8")
 
 # Wire the wake-word broadcast into MainActivity. This is applied by text patterns so
