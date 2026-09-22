@@ -191,6 +191,11 @@ class JarvisWakeService : Service() {
         super.onDestroy()
     }
 
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        if (intent?.action == ACTION_RESUME_WAKE) startWakeWord()
+        return START_STICKY
+    }
+
     override fun onBind(intent: Intent?): IBinder? = null
 
     private fun createChannel() {
