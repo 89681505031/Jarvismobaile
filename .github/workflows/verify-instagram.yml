@@ -1,0 +1,22 @@
+name: Verify Instagram gateway
+on:
+  pull_request:
+    paths:
+      - 'instagram-gateway/**'
+      - '.github/workflows/verify-instagram.yml'
+  push:
+    branches:
+      - feature/instagram-integration-starter
+    paths:
+      - 'instagram-gateway/**'
+      - '.github/workflows/verify-instagram.yml'
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm test
+        working-directory: instagram-gateway
