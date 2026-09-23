@@ -73,20 +73,20 @@ jobs:
           fi
       - name: Preserve standard APK
         run: cp mobile/android/app/build/outputs/apk/debug/app-debug.apk jarvis-phone-microphone-fixed.apk
-      - name: Build side-by-side HUD v3 Android APK
+      - name: Build side-by-side GigaChat BRAIN Android APK
         working-directory: mobile/android
         env:
           JARVIS_DIAGNOSTIC: "1"
           JARVIS_ARM64_ONLY: "1"
         run: gradle --no-daemon assembleDebug
-      - name: Preserve isolated HUD v3 APK
+      - name: Preserve isolated GigaChat BRAIN APK
         run: |
-          cp mobile/android/app/build/outputs/apk/debug/app-debug.apk jarvis-phone-hud3.apk
+          cp mobile/android/app/build/outputs/apk/debug/app-debug.apk jarvis-phone-brain.apk
           python3 - <<'PY'
           from zipfile import ZipFile
-          with ZipFile('jarvis-phone-hud3.apk') as artifact:
+          with ZipFile('jarvis-phone-brain.apk') as artifact:
               native = [name for name in artifact.namelist() if name.startswith('lib/')]
-          assert 'lib/arm64-v8a/libvosk.so' in native, 'HUD3 arm64 Vosk missing'
+          assert 'lib/arm64-v8a/libvosk.so' in native, 'BRAIN arm64 Vosk missing'
           assert all(name.startswith('lib/arm64-v8a/') for name in native), f'Unexpected native ABIs: {native}'
           PY
       - uses: actions/upload-artifact@v4
@@ -96,6 +96,6 @@ jobs:
           if-no-files-found: error
       - uses: actions/upload-artifact@v4
         with:
-          name: jarvis-phone-hud3
-          path: jarvis-phone-hud3.apk
+          name: jarvis-phone-brain
+          path: jarvis-phone-brain.apk
           if-no-files-found: error
