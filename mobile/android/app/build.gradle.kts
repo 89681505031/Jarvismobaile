@@ -21,8 +21,8 @@ android {
     buildTypes {
         getByName("debug") {
             if (System.getenv("JARVIS_DIAGNOSTIC") == "1") {
-                applicationIdSuffix = ".background"
-                manifestPlaceholders["jarvisLabel"] = "J.A.R.V.I.S. BG"
+                applicationIdSuffix = ".plus"
+                manifestPlaceholders["jarvisLabel"] = "J.A.R.V.I.S. PLUS"
             }
         }
     }
@@ -46,4 +46,6 @@ dependencies {
     implementation("androidx.core:core-ktx:1.15.0")
     implementation("com.alphacephei:vosk-android:0.3.75@aar")
     implementation("net.java.dev.jna:jna:5.18.1@aar")
+    implementation("com.google.mlkit:image-labeling:17.0.9")
+    implementation("com.google.mlkit:text-recognition:16.0.1")
 }
