@@ -49,6 +49,7 @@ class WakeForegroundService : Service() {
     private lateinit var offline: OfflineWakeEngine
     private lateinit var router: PhoneCommandRouter
     private var tts: TextToSpeech? = null
+    private lateinit var fishAudioTts: FishAudioTts
     private var ttsReady = false
     private var speaking = false
     private var suppressUntil = 0L
@@ -79,6 +80,7 @@ class WakeForegroundService : Service() {
     override fun onCreate() {
         super.onCreate()
         router = PhoneCommandRouter(this)
+        fishAudioTts = FishAudioTts(this)
         offline = OfflineWakeEngine(
             this,
             onStatus = { status, message ->
@@ -243,13 +245,42 @@ class WakeForegroundService : Service() {
     }
 
     private fun speak(text: String) {
-        tts?.let {
-            val persona = getSharedPreferences("jarvis_settings", MODE_PRIVATE)
-                .getString("persona", "J.A.R.V.I.S.").orEmpty()
-            PersonaSpeech.apply(it, persona)
-        }
-        if (!ttsReady || text.isBlank()) {
+        if (text.isBlank() || shuttingDown) {
             suppressUntil = SystemClock.elapsedRealtime() + 1_000L
+            return
+        }
+        val settings = getSharedPreferences("jarvis_settings", MODE_PRIVATE)
+        val persona = settings.getString("persona", "J.A.R.V.I.S.").orEmpty()
+        val fishKey = settings.getString("fish_api_key", "").orEmpty().trim()
+
+        speaking = true
+        // Keep the selected premium voice in the minimized foreground-service
+        // mode too. If Fish Audio is absent/offline, fall back to Android TTS.
+        if (fishKey.isNotBlank() && FishAudioTts.voiceIdFor(persona) != null) {
+            fishAudioTts.speak(
+                text = text,
+                persona = persona,
+                onError = {
+                    ui.post {
+                        if (!shuttingDown) speakWithSystemVoice(text, persona)
+                    }
+                },
+                onComplete = { ui.post { if (!shuttingDown) endSpeech() } },
+                onStart = { ui.post { if (!shuttingDown) speaking = true } }
+            )
+        } else {
+            speakWithSystemVoice(text, persona)
+        }
+    }
+
+    private fun speakWithSystemVoice(text: String, persona: String) {
+        if (shuttingDown || text.isBlank()) {
+            endSpeech()
+            return
+        }
+        tts?.let { PersonaSpeech.apply(it, persona) }
+        if (!ttsReady) {
+            endSpeech()
             return
         }
         speaking = true
@@ -337,6 +368,7 @@ class WakeForegroundService : Service() {
         armedUntil = 0L
         ui.removeCallbacksAndMessages(null)
         try { offline.release() } catch (_: Exception) {}
+        try { fishAudioTts.release() } catch (_: Exception) {}
         try { tts?.stop(); tts?.shutdown() } catch (_: Exception) {}
         active = null
         foreground = false
