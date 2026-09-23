@@ -1,5 +1,6 @@
 import { createServer } from 'node:http';
 import { createHmac, timingSafeEqual } from 'node:crypto';
+import { readFile } from 'node:fs/promises';
 
 const MAX_BODY = 64 * 1024;
 const MAX_INBOX = 200;
@@ -49,6 +50,21 @@ export function createApp({ env = process.env, fetchImpl = fetch, clock = () => 
     const url = new URL(req.url || '/', 'http://localhost');
     const path = url.pathname;
     try {
+      const pages = {
+        '/admin': ['admin.html', 'text/html; charset=utf-8'],
+        '/admin.js': ['admin.js', 'text/javascript; charset=utf-8'],
+        '/admin.css': ['admin.css', 'text/css; charset=utf-8'],
+      };
+      if (req.method === 'GET' && pages[path]) {
+        const [file, contentType] = pages[path];
+        const content = await readFile(new URL(file, import.meta.url));
+        res.writeHead(200, {
+          'Content-Type': contentType, 'Cache-Control': 'no-store',
+          'Content-Security-Policy': "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'",
+          'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'no-referrer',
+        });
+        return res.end(content);
+      }
       if (req.method === 'GET' && path === '/health') {
         return json(res, 200, { service: 'jarvis-instagram', configured: configured(),
           mode: 'human-approval-pilot', persistentInbox: false });
