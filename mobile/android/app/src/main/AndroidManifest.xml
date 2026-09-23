@@ -20,6 +20,7 @@
         <package android:name="ru.yandex.music" />
         <package android:name="com.whatsapp" />
         <package android:name="com.whatsapp.w4b" />
+        <package android:name="com.instagram.android" />
     </queries>
     <application android:name=".JarvisApplication" android:allowBackup="false" android:label="${jarvisLabel}" android:icon="@drawable/jarvis_icon" android:roundIcon="@drawable/jarvis_icon" android:theme="@style/Theme.JarvisPhone" android:usesCleartextTraffic="false" android:networkSecurityConfig="@xml/network_security_config">
         <activity android:name=".MainActivity" android:exported="true"><intent-filter><action android:name="android.intent.action.MAIN" /><category android:name="android.intent.category.LAUNCHER" /></intent-filter></activity>
