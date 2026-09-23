@@ -21,6 +21,51 @@ class JarvisSignedUpdates(private val context: Context, private val report: (Str
     private val main = android.os.Handler(android.os.Looper.getMainLooper())
     @Volatile private var busy = false
 
+    /**
+     * Checks release metadata at most once per 24 hours when the app is opened.
+     * Never downloads APKs or starts Android's installer without a separate tap.
+     */
+    fun checkAutomaticallyOnLaunch() {
+        val prefs = context.getSharedPreferences("jarvis_update_checks", Context.MODE_PRIVATE)
+        val now = System.currentTimeMillis()
+        val previous = prefs.getLong("last_check", 0L)
+        if (previous in (now - 86_400_000L)..now || busy) return
+        prefs.edit().putLong("last_check", now).apply()
+        io.execute {
+            var conn: HttpURLConnection? = null
+            try {
+                conn = (URL("https://api.github.com/repos/89681505031/Jarvismobaile/releases/latest")
+                    .openConnection() as HttpURLConnection).apply {
+                    connectTimeout = 7000
+                    readTimeout = 7000
+                    instanceFollowRedirects = false
+                    setRequestProperty("Accept", "application/vnd.github+json")
+                    setRequestProperty("User-Agent", "Jarvis-Mobile-Release-Peek")
+                }
+                if (conn.responseCode != 200) return@execute
+                val release = JSONObject(conn.inputStream.bufferedReader().use { it.readText().take(512_000) })
+                if (release.optBoolean("draft") || release.optBoolean("prerelease")) return@execute
+                val assets = release.optJSONArray("assets") ?: return@execute
+                val wanted = if (context.packageName.endsWith(".plus"))
+                    "Jarvis-Mobile-PLUS-signed.apk" else "Jarvis-Mobile-signed.apk"
+                var hasApk = false
+                for (i in 0 until assets.length()) {
+                    if (assets.optJSONObject(i)?.optString("name") == wanted) {
+                        hasApk = true
+                        break
+                    }
+                }
+                if (!hasApk) return@execute
+                val tag = release.optString("tag_name").take(64).trim()
+                if (tag.isBlank() || tag == prefs.getString("last_notice", "")) return@execute
+                prefs.edit().putString("last_notice", tag).apply()
+                announce("Найден релиз JARVIS $tag. Нажмите «Проверить обновления», чтобы проверить подпись APK и подтвердить установку.")
+            } catch (_: Exception) {
+                // An unavailable server never interrupts voice or app startup.
+            } finally { conn?.disconnect() }
+        }
+    }
+
     fun check() {
         if (busy) { report("Проверка обновлений уже выполняется."); return }
         busy = true
