@@ -148,3 +148,43 @@ test('native can reject background permission and reset the checkbox', () => {
   voice.onJarvisBackgroundWakeChanged(false);
   assert.equal(elements.get('backgroundWake').checked, false);
 });
+
+test('PLUS skills, reminder and battery settings are opt-in and validate user actions', () => {
+  const { context, elements, calls } = load();
+  const reminders = [];
+  context.window.AndroidJarvis.getInterruptByVoice = () => false;
+  context.window.AndroidJarvis.setInterruptByVoice = enabled => reminders.push('interrupt:' + enabled);
+  context.window.AndroidJarvis.scheduleReminder = (text, n) => { reminders.push(text + ':' + n); return 'Напоминание создано'; };
+  context.window.AndroidJarvis.batteryMinutes = () => 30;
+  context.window.AndroidJarvis.setBatteryMinutes = n => reminders.push('battery:' + n) || true;
+  elements.get('voiceInterrupt').onchange({ target: { checked: true } });
+  context.document.getElementById('reminderText').value = 'проверить уроки';
+  context.document.getElementById('reminderMinutes').value = '10';
+  elements.get('addReminder').onclick();
+  elements.get('batteryMinutes').onchange({ target: { value: '15' } });
+  assert.deepEqual(reminders, ['interrupt:true', 'проверить уроки:10', 'battery:15']);
+  assert.equal(elements.get('reminderStatus').textContent, 'Напоминание создано');
+});
+test('PLUS home actions are manually triggered and cloud credentials are not reflected', () => {
+  const { context, elements } = load();
+  const calls=[];
+  context.window.AndroidJarvis.configureHome = (url, token, entity) => { calls.push({url,token,entity}); return 'Подключено'; };
+  context.window.AndroidJarvis.controlSmartLight = on => {calls.push(on);return 'Отправляю команду';};
+  context.document.getElementById('homeUrl').value='https://home.example.com';
+  context.document.getElementById('homeToken').value='example-secret-123456789';
+  context.document.getElementById('homeEntity').value='light.desk';
+  elements.get('connectHome').onclick();
+  assert.equal(elements.get('homeToken').value, '');
+  elements.get('homeLightOn').onclick();
+  assert.deepEqual(calls,[{url:'https://home.example.com',token:'example-secret-123456789',entity:'light.desk'},true]);
+});
+test('PLUS local vision only starts after a user tap', () => {
+  const { context, elements } = load();
+  let taps=0;
+  context.window.AndroidJarvis.startVisionCamera = () => taps++;
+  context.window.AndroidJarvis.selectVisionPhoto = () => taps++;
+  assert.equal(taps,0);
+  elements.get('visionCamera').onclick();
+  elements.get('visionPicker').onclick();
+  assert.equal(taps,2);
+});

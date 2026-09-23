@@ -73,13 +73,22 @@ jobs:
           fi
       - name: Preserve standard APK
         run: cp mobile/android/app/build/outputs/apk/debug/app-debug.apk jarvis-phone-microphone-fixed.apk
-      - name: Build side-by-side background voice APK
+      - name: Build side-by-side PLUS skills APK
         working-directory: mobile/android
         env:
           JARVIS_DIAGNOSTIC: "1"
+          JARVIS_ARM64_ONLY: "1"
         run: gradle --no-daemon assembleDebug
-      - name: Preserve isolated background APK
-        run: cp mobile/android/app/build/outputs/apk/debug/app-debug.apk jarvis-phone-background.apk
+      - name: Preserve isolated PLUS APK
+        run: |
+          cp mobile/android/app/build/outputs/apk/debug/app-debug.apk jarvis-phone-plus.apk
+          python3 - <<'PY'
+          from zipfile import ZipFile
+          with ZipFile('jarvis-phone-plus.apk') as artifact:
+              native = [name for name in artifact.namelist() if name.startswith('lib/')]
+          assert 'lib/arm64-v8a/libvosk.so' in native, 'arm64 Vosk missing'
+          assert all(name.startswith('lib/arm64-v8a/') for name in native), f'Unexpected native ABIs: {native}'
+          PY
       - uses: actions/upload-artifact@v4
         with:
           name: jarvis-phone-microphone-fixed
@@ -87,6 +96,6 @@ jobs:
           if-no-files-found: error
       - uses: actions/upload-artifact@v4
         with:
-          name: jarvis-phone-background
-          path: jarvis-phone-background.apk
+          name: jarvis-phone-plus
+          path: jarvis-phone-plus.apk
           if-no-files-found: error

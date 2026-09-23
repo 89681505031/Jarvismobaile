@@ -3,6 +3,10 @@ package com.jarvis.phone
 import android.Manifest
 import android.app.Activity
 import android.content.Intent
+import android.graphics.Bitmap
+import android.net.Uri
+import android.provider.MediaStore
+import android.provider.Settings
 import android.content.pm.PackageManager
 import android.os.Bundle
 import android.os.Handler
@@ -42,6 +46,13 @@ class MainActivity : Activity() {
     private var pageReady = false
     private var pendingBackgroundCommand: String? = null
     private var systemSpeechOpen = false
+    private var interruptByVoice = false
+    private var pendingCameraPermission = false
+    private lateinit var skills: SkillCatalog
+    private lateinit var reminders: JarvisReminders
+    private lateinit var home: JarvisHomeAssistant
+    private lateinit var vision: JarvisVision
+    private lateinit var updates: JarvisSignedUpdates
     private var wakeSessionActive = false
     private var wakeFailures = 0
     private var wakeRestart: Runnable? = null
@@ -68,6 +79,17 @@ class MainActivity : Activity() {
         super.onCreate(savedInstanceState)
         router = PhoneCommandRouter(this)
         gigaChat = GigaChatClient(this)
+        skills = SkillCatalog(this)
+        reminders = JarvisReminders(this)
+        home = JarvisHomeAssistant(this)
+        vision = JarvisVision(this)
+        updates = JarvisSignedUpdates(this) { status ->
+            runOnUiThread {
+                voiceEvent("onJarvisFeatureStatus", "updates", status)
+                showVoiceStatus(status)
+            }
+        }
+        interruptByVoice = prefs.getBoolean("interrupt_voice", false)
         selectedPersona = prefs.getString("persona", "J.A.R.V.I.S.") ?: "J.A.R.V.I.S."
         wakeModeEnabled = prefs.getBoolean("wake_mode", false)
         backgroundWakeEnabled = prefs.getBoolean("background_wake", false)
@@ -80,6 +102,7 @@ class MainActivity : Activity() {
             ttsReady = status == TextToSpeech.SUCCESS
             if (ttsReady) {
                 tts?.language = Locale("ru", "RU")
+                tts?.let { PersonaSpeech.apply(it, selectedPersona) }
                 tts?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
                     override fun onStart(utteranceId: String?) = Unit
                     override fun onDone(utteranceId: String?) { utteranceId?.substringAfterLast("-")?.toLongOrNull()?.let { finishSpeech(it) } }
@@ -98,12 +121,27 @@ class MainActivity : Activity() {
                     voiceEvent("onJarvisWakeStatus", "listening", message)
             },
             onMatch = { activation ->
-                wakeSessionActive = false
-                selectedPersona = activation.persona
-                prefs.edit().putString("persona", activation.persona).apply()
-                voiceEvent("onJarvisWakeDetected", activation.persona, activation.command)
-                if (activation.command.isBlank()) speak("Слушаю", resumeAfterSpeech = true)
-            }
+                if (isSpeaking) {
+                    val stop = activation.command.trim().lowercase(Locale("ru", "RU"))
+                    if (interruptByVoice && stop in setOf("стоп", "замолчи", "прекрати", "хватит")) {
+                        offlineWake.stop()
+                        wakeSessionActive = false
+                        stopSpeech()
+                        voiceEvent("onJarvisInterruptStatus", "Ответ прерван голосом.")
+                        if (activityResumed && wakeModeEnabled) scheduleWakeRestart(550L)
+                    }
+                    // Ignore other words while speaking; don't execute commands
+                    // accidentally from the phone's own speaker.
+                } else {
+                    offlineWake.stop()
+                    wakeSessionActive = false
+                    selectedPersona = activation.persona
+                    prefs.edit().putString("persona", activation.persona).apply()
+                    voiceEvent("onJarvisWakeDetected", activation.persona, activation.command)
+                    if (activation.command.isBlank()) speak("Слушаю", resumeAfterSpeech = true)
+                }
+            },
+            stayOpenOnMatch = true
         )
         // Old builds used repeating SpeechRecognizer sessions, causing audible
         // system chimes. Never resume that legacy mode without the offline model.
@@ -122,6 +160,9 @@ class MainActivity : Activity() {
                 override fun onPageFinished(view: WebView?, url: String?) {
                     pageReady = true
                     deliverBackgroundCommand()
+                    // At most one metadata request a day. Installation always
+                    // requires a separate user tap and signature verification.
+                    updates.checkAutomaticallyOnLaunch()
                 }
             }
             addJavascriptInterface(AndroidBridge(), "AndroidJarvis")
@@ -418,6 +459,21 @@ class MainActivity : Activity() {
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == 7411 || requestCode == 7412) {
+            if (resultCode == RESULT_OK) {
+                if (requestCode == 7411) {
+                    @Suppress("DEPRECATION")
+                    val bitmap = data?.extras?.get("data") as? Bitmap
+                    if (bitmap == null) showVoiceStatus("Камера не вернула фото.")
+                    else vision.fromCameraThumbnail(bitmap) { showVoiceStatus(it) }
+                } else {
+                    val uri = data?.data
+                    if (uri == null) showVoiceStatus("Изображение не выбрано.")
+                    else vision.fromPhoto(uri) { showVoiceStatus(it) }
+                }
+            }
+            return
+        }
         if (requestCode != 7012) return
         systemSpeechOpen = false
         val text = data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)?.firstOrNull().orEmpty()
@@ -429,6 +485,14 @@ class MainActivity : Activity() {
 
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == 7413) {
+            val wanted = pendingCameraPermission
+            pendingCameraPermission = false
+            if (wanted && grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED)
+                openVisionCamera()
+            else showVoiceStatus("Разрешите камеру для снимка или выберите готовую фотографию.")
+            return
+        }
         if (requestCode == 7013) {
             val requested = pendingBackgroundNotification
             pendingBackgroundNotification = false
@@ -561,7 +625,12 @@ class MainActivity : Activity() {
             val resume = resumeListeningAfterSpeech
             resumeListeningAfterSpeech = false
             if (resume && activityResumed) startConversationListening(12_000)
-            else if (wakeModeEnabled && activityResumed) scheduleWakeRestart(850L)
+            else if (wakeModeEnabled && activityResumed) {
+                if (wakeSessionActive) {
+                    wakeSessionActive = false
+                    offlineWake.stop { scheduleWakeRestart(850L) }
+                } else scheduleWakeRestart(850L)
+            }
         }
     }
 
@@ -583,6 +652,14 @@ class MainActivity : Activity() {
                 finishSpeech(generation)
             }
         }.also { mainHandler.postDelayed(it, 120_000) }
+        if (interruptByVoice && wakeModeEnabled && offlineWake.installed() && activityResumed) {
+            mainHandler.postDelayed({
+                if (isSpeaking && interruptByVoice && activityResumed && !wakeSessionActive) {
+                    wakeSessionActive = true
+                    offlineWake.start()
+                }
+            }, 450L)
+        }
         val apiKey = prefs.getString("fish_api_key", "").orEmpty()
         if (apiKey.isNotBlank() && FishAudioTts.voiceIdFor(selectedPersona) != null) {
             fishAudioTts.speak(text, selectedPersona,
@@ -598,6 +675,7 @@ class MainActivity : Activity() {
             else finishSpeech(generation)
             return
         }
+        tts?.let { PersonaSpeech.apply(it, selectedPersona) }
         val result = tts?.speak(text, TextToSpeech.QUEUE_FLUSH, null, "jarvis-$generation") ?: TextToSpeech.ERROR
         if (result == TextToSpeech.ERROR) finishSpeech(generation)
     }
@@ -783,10 +861,57 @@ class MainActivity : Activity() {
     }
 
     private fun checkForUpdates(manual: Boolean) {
-        if (manual) runOnUiThread {
-            if (isFinishing || isDestroyed) return@runOnUiThread
-            Toast.makeText(this, "Версия ${BuildConfig.VERSION_NAME}. Обновления устанавливаются из проверенной сборки GitHub Actions.", Toast.LENGTH_LONG).show()
+        if (manual) updates.check()
+    }
+
+    private fun openVisionCamera() {
+        if (!activityResumed || !skills.enabled("vision")) return
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
+            pendingCameraPermission = true
+            ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.CAMERA), 7413)
+            return
         }
+        try {
+            @Suppress("DEPRECATION")
+            startActivityForResult(Intent(MediaStore.ACTION_IMAGE_CAPTURE), 7411)
+        } catch (_: Exception) { showVoiceStatus("Системная камера недоступна.") }
+    }
+
+    private fun selectVisionImage() {
+        if (!activityResumed || !skills.enabled("vision")) return
+        val picker = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+            type = "image/*"
+            addCategory(Intent.CATEGORY_OPENABLE)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        try {
+            @Suppress("DEPRECATION")
+            startActivityForResult(picker, 7412)
+        } catch (_: Exception) { showVoiceStatus("Выбор фото недоступен.") }
+    }
+
+    private fun setFloatingOrb(enabled: Boolean) {
+        val shortcutPrefs = getSharedPreferences("jarvis_features", MODE_PRIVATE)
+        if (!enabled) {
+            shortcutPrefs.edit().putBoolean("floating_orb", false).apply()
+            stopService(Intent(this, JarvisFloatingOrb::class.java))
+            voiceEvent("onJarvisOverlayStatus", false, "Плавающая кнопка отключена.")
+            return
+        }
+        if (!skills.enabled("overlay")) {
+            voiceEvent("onJarvisOverlayStatus", false, "Сначала включите навык плавающей кнопки.")
+            return
+        }
+        if (!Settings.canDrawOverlays(this)) {
+            voiceEvent("onJarvisOverlayStatus", false,
+                "Android откроет экран разрешения. После разрешения вернитесь и включите переключатель ещё раз.")
+            startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                Uri.parse("package:$packageName")))
+            return
+        }
+        shortcutPrefs.edit().putBoolean("floating_orb", true).apply()
+        startService(Intent(this, JarvisFloatingOrb::class.java))
+        voiceEvent("onJarvisOverlayStatus", true, "Плавающая кнопка включена. × убирает её с экрана.")
     }
 
     inner class AndroidBridge {
@@ -801,6 +926,25 @@ class MainActivity : Activity() {
             rememberUserName(memoryText)
             memory.recordHabit(memoryText)
             val normalized = memoryText.lowercase()
+            if (skills.enabled("reminders")) {
+                if (normalized == "мои напоминания" || normalized == "список напоминаний")
+                    return reminders.list()
+                val parsed = JarvisReminders.parseRussian(memoryText)
+                if (parsed != null) return reminders.schedule(parsed.second, parsed.first)
+            }
+            if (skills.enabled("offline")) OfflineKnowledge.answer(memoryText)?.let { return it }
+            if (skills.enabled("home") && normalized in setOf(
+                    "включи умный свет", "выключи умный свет", "включи домашний свет", "выключи домашний свет")) {
+                val on = normalized.startsWith("включи")
+                backgroundExecutor.execute {
+                    val response = home.setLight(on)
+                    runOnUiThread {
+                        voiceEvent("onJarvisFeatureStatus", "home", response)
+                        if (activityResumed) speak(response, resumeAfterSpeech = true)
+                    }
+                }
+                return "Отправляю команду выбранному светильнику…"
+            }
             if (
                 normalized.contains("кто мне написал") ||
                 normalized.contains("прочитай сообщения") ||
@@ -939,6 +1083,51 @@ class MainActivity : Activity() {
         }
 
         @JavascriptInterface fun startListening() { runOnUiThread { this@MainActivity.startListening() } }
+        @JavascriptInterface fun getInterruptByVoice(): Boolean = prefs.getBoolean("interrupt_voice", false)
+        @JavascriptInterface fun setInterruptByVoice(enabled: Boolean) {
+            prefs.edit().putBoolean("interrupt_voice", enabled).apply()
+            runOnUiThread {
+                interruptByVoice = enabled
+                if (!enabled && isSpeaking && wakeSessionActive) {
+                    wakeSessionActive = false
+                    offlineWake.stop()
+                }
+            }
+        }
+        @JavascriptInterface fun skillsJson(): String = skills.json()
+        @JavascriptInterface fun enableSkill(id: String, enabled: Boolean): Boolean = skills.set(id, enabled)
+        @JavascriptInterface fun scheduleReminder(text: String, minutes: Int): String =
+            if (skills.enabled("reminders")) reminders.schedule(text, minutes)
+            else "Включите навык напоминаний."
+        @JavascriptInterface fun listReminders(): String = reminders.list()
+        @JavascriptInterface fun cancelReminder(id: Int): String = reminders.cancel(id)
+        @JavascriptInterface fun startVisionCamera() { runOnUiThread { openVisionCamera() } }
+        @JavascriptInterface fun selectVisionPhoto() { runOnUiThread { selectVisionImage() } }
+        @JavascriptInterface fun configureHome(url: String, token: String, entity: String): String =
+            home.configure(url, token, entity)
+        @JavascriptInterface fun homeStatus(): String =
+            if (home.configured()) "Подключён выбранный свет: ${home.entity()}"
+            else "Home Assistant ещё не подключён."
+        @JavascriptInterface fun clearHome() { home.clear() }
+        @JavascriptInterface fun controlSmartLight(on: Boolean): String {
+            if (!skills.enabled("home")) return "Включите навык умного дома."
+            backgroundExecutor.execute {
+                val response = home.setLight(on)
+                runOnUiThread { voiceEvent("onJarvisFeatureStatus", "home", response) }
+            }
+            return "Отправляю команду выбранному светильнику…"
+        }
+        @JavascriptInterface fun overlayEnabled(): Boolean =
+            getSharedPreferences("jarvis_features", MODE_PRIVATE).getBoolean("floating_orb", false)
+        @JavascriptInterface fun setOverlayEnabled(enabled: Boolean) {
+            runOnUiThread { setFloatingOrb(enabled) }
+        }
+        @JavascriptInterface fun batteryMinutes(): Int = WakeBatteryPolicy.remainingAllowedMinutes(prefs)
+        @JavascriptInterface fun setBatteryMinutes(minutes: Int): Boolean {
+            if (minutes !in setOf(0, 15, 30, 60, 120)) return false
+            prefs.edit().putInt("background_minutes", minutes).apply()
+            return true
+        }
         @JavascriptInterface fun getWakeModeEnabled(): Boolean = prefs.getBoolean("wake_mode", false)
         @JavascriptInterface fun getBackgroundWakeEnabled(): Boolean = prefs.getBoolean("background_wake", false)
         @JavascriptInterface fun setBackgroundWakeEnabled(enabled: Boolean) {

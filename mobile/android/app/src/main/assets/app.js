@@ -40,7 +40,7 @@ function selectAllApps(){document.querySelectorAll('#appsList input[type=checkbo
 function loadPersonas(){personaList.innerHTML='';personas.forEach(([n,d])=>{const r=document.createElement('label');r.className='app-row';r.innerHTML='<span><strong>'+n+'</strong><small> — '+d+'</small></span><input type="radio" name="persona" '+(state.persona===n?'checked':'')+'>';r.querySelector('input').onchange=()=>{state.persona=n;localStorage.setItem('jarvisPersona',n);window.AndroidJarvis?.setPersona(n);render()};personaList.appendChild(r)})}
 function register(){const n=$('profileName').value.trim(),d=+$('profileDay').value,m=+$('profileMonth').value,y=+$('profileYear').value,rf=$('regFishApiKey')?.value.trim()||'',rg=$('regGigaApiKey')?.value.trim()||'';if(!n||!Number.isInteger(d)||!Number.isInteger(m)||!Number.isInteger(y)||y<1900||y>2100||new Date(y,m-1,d).getDate()!==d||new Date(y,m-1,d).getMonth()!==m-1){showMessage('Заполните имя и дату рождения корректно.');return}localStorage.setItem('jarvisName',n);localStorage.setItem('jarvisBirth',JSON.stringify({day:d,month:m,year:y}));if(rf||rg)window.AndroidJarvis?.setApiKeys?.(rf,rg);$('registration').hidden=true;showMessage('Добро пожаловать, '+n+'. Я JARVIS.');window.AndroidJarvis?.setUserProfile?.(n,d,m,y);window.AndroidJarvis?.command?.('меня зовут '+n);window.AndroidJarvis?.speak?.('Добро пожаловать, '+n);render()}
 if($('saveProfile'))$('saveProfile').onclick=register;if(localStorage.getItem('jarvisName')||localStorage.getItem('jarvisOnboarded'))$('registration').hidden=true;else $('registration').hidden=false;
-modeButton.onclick=()=>{showMessage('Сейчас подключено управление телефоном. Управление ПК требует отдельного подключения.')};modeNav.onclick=()=>{showMessage('Сейчас подключено управление телефоном. Управление ПК требует отдельного подключения.')};appsNav.onclick=()=>{appsPanel.hidden=!appsPanel.hidden;commandsPanel.hidden=true;settingsPanel.hidden=true;if(!appsPanel.hidden)loadApps()};commandsNav.onclick=()=>{commandsPanel.hidden=!commandsPanel.hidden;appsPanel.hidden=true;settingsPanel.hidden=true};settingsNav.onclick=()=>{settingsPanel.hidden=!settingsPanel.hidden;appsPanel.hidden=true;commandsPanel.hidden=true;if(!settingsPanel.hidden)loadPersonas()};refreshApps.onclick=loadApps;if($('selectAllApps'))$('selectAllApps').onclick=selectAllApps;if($('appsSearch'))$('appsSearch').oninput=filterApps;send.onclick=()=>sendCommand();command.onkeydown=e=>{if(e.key==='Enter')sendCommand()};orbButton.onclick=startListening;orbButton.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();startListening()}};saveApiKeys.onclick=()=>{apiStatus.textContent=window.AndroidJarvis?.setApiKeys?.(fishApiKey.value.trim(),gigaApiKey.value.trim())||'Сохранение доступно в APK'};$('saveMemory').onclick=()=>{$('memoryStatus').textContent=window.AndroidJarvis?.setMemoryGateway?.($('memoryUrl').value.trim(),$('memoryToken').value.trim())||'Недоступно';$('memoryToken').value=''};$('disableMemory').onclick=()=>{$('memoryStatus').textContent=window.AndroidJarvis?.setMemoryGateway?.('','')||'Недоступно';$('memoryUrl').value='';$('memoryToken').value=''};$('memoryUrl').value=window.AndroidJarvis?.getMemoryGatewayUrl?.()||'';settingsNav.addEventListener('click',()=>{$('memoryStatus').textContent=window.AndroidJarvis?.getMemoryGatewayStatus?.()||'Недоступно'});$('memoryStatus').textContent=window.AndroidJarvis?.getMemoryGatewayStatus?.()||'Локальная память работает.';checkUpdates.onclick=()=>window.AndroidJarvis?.checkUpdates?.();render();
+modeButton.onclick=()=>{showMessage('Сейчас подключено управление телефоном. Управление ПК требует отдельного подключения.')};modeNav.onclick=()=>{showMessage('Сейчас подключено управление телефоном. Управление ПК требует отдельного подключения.')};appsNav.onclick=()=>{appsPanel.hidden=!appsPanel.hidden;commandsPanel.hidden=true;settingsPanel.hidden=true;if(!appsPanel.hidden)loadApps()};commandsNav.onclick=()=>{commandsPanel.hidden=!commandsPanel.hidden;appsPanel.hidden=true;settingsPanel.hidden=true};settingsNav.onclick=()=>{settingsPanel.hidden=!settingsPanel.hidden;appsPanel.hidden=true;commandsPanel.hidden=true;if(!settingsPanel.hidden)loadPersonas()};refreshApps.onclick=loadApps;if($('selectAllApps'))$('selectAllApps').onclick=selectAllApps;if($('appsSearch'))$('appsSearch').oninput=filterApps;send.onclick=()=>sendCommand();command.onkeydown=e=>{if(e.key==='Enter')sendCommand()};orbButton.onclick=startListening;orbButton.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();startListening()}};saveApiKeys.onclick=()=>{apiStatus.textContent=window.AndroidJarvis?.setApiKeys?.(fishApiKey.value.trim(),gigaApiKey.value.trim())||'Сохранение доступно в APK'};$('saveMemory').onclick=()=>{$('memoryStatus').textContent=window.AndroidJarvis?.setMemoryGateway?.($('memoryUrl').value.trim(),$('memoryToken').value.trim())||'Недоступно';$('memoryToken').value=''};$('disableMemory').onclick=()=>{$('memoryStatus').textContent=window.AndroidJarvis?.setMemoryGateway?.('','')||'Недоступно';$('memoryUrl').value='';$('memoryToken').value=''};$('memoryUrl').value=window.AndroidJarvis?.getMemoryGatewayUrl?.()||'';settingsNav.addEventListener('click',()=>{$('memoryStatus').textContent=window.AndroidJarvis?.getMemoryGatewayStatus?.()||'Недоступно'});$('memoryStatus').textContent=window.AndroidJarvis?.getMemoryGatewayStatus?.()||'Локальная память работает.';checkUpdates.onclick=()=>{window.AndroidJarvis?.checkUpdates?.();$('updateInfo').textContent='Проверка подписанного релиза запущена…';};render();
 $('microphoneSettings').onclick=()=>window.AndroidJarvis?.openMicrophoneSettings?.();
 $('wakeMode').checked=!!window.AndroidJarvis?.getWakeModeEnabled?.();
 $('backgroundWake').checked=!!window.AndroidJarvis?.getBackgroundWakeEnabled?.();
@@ -106,5 +106,68 @@ $('diagnoseMic').onclick=()=>{
   window.onJarvisMicDiagnostic('checking','Запускаю проверку микрофона…');
   window.AndroidJarvis.diagnoseMicrophone();
 };
+
+
+window.onJarvisFeatureStatus=(feature,text)=>{
+  const target=feature==='home'?'homeStatus':feature==='vision'?'visionStatus':feature==='updates'?'updateInfo':'reminderStatus';
+  $(target).textContent=text||'Готово';
+  if(feature==='vision')showMessage(text);
+};
+$('voiceInterrupt').checked=!!window.AndroidJarvis?.getInterruptByVoice?.();
+$('voiceInterrupt').onchange=e=>window.AndroidJarvis?.setInterruptByVoice?.(!!e.target.checked);
+$('batteryMinutes').value=String(window.AndroidJarvis?.batteryMinutes?.()??30);
+$('batteryMinutes').onchange=e=>{
+  const ok=window.AndroidJarvis?.setBatteryMinutes?.(Number(e.target.value));
+  if(!ok)$('batteryMinutes').value='30';
+};
+$('addReminder').onclick=()=>{
+  const text=$('reminderText').value.trim(),n=Number($('reminderMinutes').value);
+  if(!text||!Number.isInteger(n)||n<1||n>10080){
+    $('reminderStatus').textContent='Укажите текст и время от 1 минуты до 7 дней.';return;
+  }
+  $('reminderStatus').textContent=window.AndroidJarvis?.scheduleReminder?.(text,n)||'Недоступно в этом APK';
+};
+$('listReminders').onclick=()=>{
+  $('reminderStatus').textContent=window.AndroidJarvis?.listReminders?.()||'Недоступно';
+};
+$('visionCamera').onclick=()=>window.AndroidJarvis?.startVisionCamera?.();
+$('visionPicker').onclick=()=>window.AndroidJarvis?.selectVisionPhoto?.();
+$('homeStatus').textContent=window.AndroidJarvis?.homeStatus?.()||'Умный дом не подключён.';
+$('connectHome').onclick=()=>{
+  $('homeStatus').textContent=window.AndroidJarvis?.configureHome?.(
+    $('homeUrl').value.trim(),$('homeToken').value.trim(),$('homeEntity').value.trim()
+  )||'Недоступно';
+  $('homeToken').value='';
+};
+$('homeLightOn').onclick=()=>{
+  $('homeStatus').textContent=window.AndroidJarvis?.controlSmartLight?.(true)||'Недоступно';
+};
+$('homeLightOff').onclick=()=>{
+  $('homeStatus').textContent=window.AndroidJarvis?.controlSmartLight?.(false)||'Недоступно';
+};
+$('disconnectHome').onclick=()=>{
+  window.AndroidJarvis?.clearHome?.();$('homeStatus').textContent='Подключение очищено.';
+  $('homeUrl').value='';$('homeToken').value='';$('homeEntity').value='';
+};
+function populateSkills(){
+  let skills=[];
+  try{skills=JSON.parse(window.AndroidJarvis?.skillsJson?.()||'[]')}catch(_){}
+  $('skillCatalog').innerHTML='';
+  skills.forEach(item=>{
+    const row=document.createElement('label'),span=document.createElement('span'),input=document.createElement('input');
+    row.className='app-row';span.textContent=item.title;
+    input.type='checkbox';input.checked=!!item.enabled;
+    input.onchange=e=>{if(!window.AndroidJarvis?.enableSkill?.(item.id,!!e.target.checked))e.target.checked=!e.target.checked};
+    row.appendChild(span);row.appendChild(input);$('skillCatalog').appendChild(row);
+  });
+}
+populateSkills();
+$('overlayMode').checked=!!window.AndroidJarvis?.overlayEnabled?.();
+window.onJarvisOverlayStatus=(enabled,text)=>{
+  $('overlayMode').checked=!!enabled;
+  $('overlayStatus').textContent=text||'';
+};
+$('overlayMode').onchange=e=>window.AndroidJarvis?.setOverlayEnabled?.(!!e.target.checked);
+window.onJarvisInterruptStatus=text=>{ $('micStatus').textContent=text;showMessage(text); };
 
 $('skipRegistration').onclick=()=>{localStorage.setItem('jarvisOnboarded','1');$('registration').hidden=true;showMessage('Нажмите на круг, чтобы проверить голосовой ввод.');};

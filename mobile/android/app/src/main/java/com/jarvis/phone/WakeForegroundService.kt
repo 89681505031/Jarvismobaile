@@ -57,6 +57,22 @@ class WakeForegroundService : Service() {
     private var shuttingDown = false
     private var pendingCommand: String? = null
     private var notificationText = "Тихая активация работает в фоне"
+    private var startedAtElapsed = 0L
+    private val batteryCheck = object : Runnable {
+        override fun run() {
+            if (shuttingDown || !shouldListenInBackground) return
+            val settings = getSharedPreferences("jarvis_settings", MODE_PRIVATE)
+            val allowed = WakeBatteryPolicy.remainingAllowedMinutes(settings)
+            val timedOut = startedAtElapsed > 0L && allowed > 0 &&
+                SystemClock.elapsedRealtime() - startedAtElapsed >= allowed * 60_000L
+            if (timedOut || WakeBatteryPolicy.batteryTooLow(this@WakeForegroundService)) {
+                notificationText = if (timedOut) "Фоновый микрофон автоматически остановлен по таймеру."
+                    else "Фоновый микрофон остановлен: заряд батареи ниже 15%."
+                updateNotification()
+                failClosed()
+            } else ui.postDelayed(this, 60_000L)
+        }
+    }
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -120,9 +136,10 @@ class WakeForegroundService : Service() {
                     // Android 14+ enforces both the microphone service type and
                     // its matching permission; start only from visible Activity.
                     try {
+                        val serviceType = if (android.os.Build.VERSION.SDK_INT >= 30)
+                            ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE else 0
                         ServiceCompat.startForeground(
-                            this, NOTIFICATION_ID, buildNotification(),
-                            ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
+                            this, NOTIFICATION_ID, buildNotification(), serviceType
                         )
                         foreground = true
                     } catch (_: SecurityException) {
@@ -147,6 +164,15 @@ class WakeForegroundService : Service() {
     fun startBackgroundListening() {
         if (shuttingDown || !foreground || !shouldListenInBackground ||
             !getSharedPreferences("jarvis_settings", MODE_PRIVATE).getBoolean("background_wake", false)) return
+        if (WakeBatteryPolicy.batteryTooLow(this)) {
+            notificationText = "Заряд ниже 15%: фоновое ожидание не запускается."
+            updateNotification()
+            failClosed()
+            return
+        }
+        if (startedAtElapsed == 0L) startedAtElapsed = SystemClock.elapsedRealtime()
+        ui.removeCallbacks(batteryCheck)
+        ui.postDelayed(batteryCheck, 60_000L)
         if (offline.installed()) offline.start()
     }
 
@@ -154,6 +180,8 @@ class WakeForegroundService : Service() {
     fun pauseForForeground(afterStopped: () -> Unit) {
         shouldListenInBackground = false
         armedUntil = 0L
+        startedAtElapsed = 0L
+        ui.removeCallbacks(batteryCheck)
         pendingCommand = null
         notificationText = "Работа в фоне включена. Откройте JARVIS для обычных команд."
         updateNotification()
@@ -215,6 +243,11 @@ class WakeForegroundService : Service() {
     }
 
     private fun speak(text: String) {
+        tts?.let {
+            val persona = getSharedPreferences("jarvis_settings", MODE_PRIVATE)
+                .getString("persona", "J.A.R.V.I.S.").orEmpty()
+            PersonaSpeech.apply(it, persona)
+        }
         if (!ttsReady || text.isBlank()) {
             suppressUntil = SystemClock.elapsedRealtime() + 1_000L
             return
