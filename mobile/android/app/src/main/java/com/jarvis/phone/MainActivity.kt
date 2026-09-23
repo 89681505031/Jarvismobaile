@@ -160,6 +160,9 @@ class MainActivity : Activity() {
                 override fun onPageFinished(view: WebView?, url: String?) {
                     pageReady = true
                     deliverBackgroundCommand()
+                    // At most one metadata request a day. Installation always
+                    // requires a separate user tap and signature verification.
+                    updates.checkAutomaticallyOnLaunch()
                 }
             }
             addJavascriptInterface(AndroidBridge(), "AndroidJarvis")
