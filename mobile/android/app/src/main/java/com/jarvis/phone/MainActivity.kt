@@ -662,6 +662,43 @@ class MainActivity : Activity() {
         @JavascriptInterface fun getMemoryGatewayStatus(): String = cloudMemory.status()
         @JavascriptInterface fun getMemoryGatewayUrl(): String = cloudMemory.endpoint()
 
+        // Store only the gateway origin. Instagram OAuth and admin secrets stay out of the APK.
+        @JavascriptInterface fun setInstagramGatewayUrl(value: String): String {
+            if (value.isBlank()) {
+                prefs.edit().remove("instagram_gateway_url").apply()
+                return "Адрес шлюза Instagram очищен."
+            }
+            val origin = try {
+                val uri = java.net.URI(value.trim())
+                if (uri.scheme != "https" || uri.host.isNullOrBlank() ||
+                    uri.rawUserInfo != null || uri.rawQuery != null || uri.rawFragment != null ||
+                    (uri.rawPath != null && uri.rawPath != "" && uri.rawPath != "/") ||
+                    uri.port > 65535) null
+                else "https://" + uri.rawAuthority
+            } catch (_: Exception) { null }
+            if (origin == null) return "Укажите только HTTPS-адрес сервера, например https://example.com."
+            prefs.edit().putString("instagram_gateway_url", origin).apply()
+            return "Сервер Instagram сохранён. Для работы Direct настройте API на сервере."
+        }
+
+        @JavascriptInterface fun getInstagramGatewayUrl(): String =
+            prefs.getString("instagram_gateway_url", "").orEmpty()
+
+        @JavascriptInterface fun openInstagramDashboard(): String {
+            val origin = getInstagramGatewayUrl()
+            if (origin.isBlank()) return "Сначала сохраните HTTPS-адрес своего шлюза Instagram."
+            runOnUiThread {
+                try {
+                    startActivity(Intent(Intent.ACTION_VIEW,
+                        android.net.Uri.parse(origin + "/admin")))
+                } catch (_: Exception) {
+                    Toast.makeText(this@MainActivity, "Не удалось открыть шлюз Instagram.", Toast.LENGTH_LONG).show()
+                }
+            }
+            return "Открываю панель Instagram в браузере."
+        }
+
+
 
         @JavascriptInterface
         fun setApiKeys(fish: String, giga: String): String {
