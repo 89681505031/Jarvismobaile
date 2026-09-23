@@ -77,9 +77,27 @@ jobs:
         working-directory: mobile/android
         env:
           JARVIS_DIAGNOSTIC: "1"
+          JARVIS_ARM64_ONLY: "1"
         run: gradle --no-daemon assembleDebug
       - name: Preserve isolated PLUS APK
-        run: cp mobile/android/app/build/outputs/apk/debug/app-debug.apk jarvis-phone-plus.apk
+        run: |
+          cp mobile/android/app/build/outputs/apk/debug/app-debug.apk jarvis-phone-plus.apk
+          unzip -Z1 jarvis-phone-plus.apk | grep -q '^lib/arm64-v8a/libvosk.so
+      - uses: actions/upload-artifact@v4
+        with:
+          name: jarvis-phone-microphone-fixed
+          path: jarvis-phone-microphone-fixed.apk
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        with:
+          name: jarvis-phone-plus
+          path: jarvis-phone-plus.apk
+          if-no-files-found: error
+
+          if unzip -Z1 jarvis-phone-plus.apk | grep -E '^lib/(x86|x86_64|armeabi-v7a|mips|mips64)/'; then
+            echo "::error::PLUS tester contains unused native architectures"
+            exit 1
+          fi
       - uses: actions/upload-artifact@v4
         with:
           name: jarvis-phone-microphone-fixed
