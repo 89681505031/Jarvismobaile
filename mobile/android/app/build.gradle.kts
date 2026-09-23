@@ -26,8 +26,8 @@ android {
     buildTypes {
         getByName("debug") {
             if (System.getenv("JARVIS_DIAGNOSTIC") == "1") {
-                applicationIdSuffix = ".plus"
-                manifestPlaceholders["jarvisLabel"] = "J.A.R.V.I.S. PLUS"
+                applicationIdSuffix = ".hud3"
+                manifestPlaceholders["jarvisLabel"] = "J.A.R.V.I.S. HUD 3"
             }
         }
     }
