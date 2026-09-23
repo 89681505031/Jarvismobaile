@@ -108,9 +108,12 @@ class JarvisSignedUpdates(private val context: Context, private val report: (Str
                     if (oldSigners.isNullOrEmpty() || oldSigners != newSigners)
                         error("Подпись APK отличается от установленной. Обновление заблокировано.")
                     @Suppress("DEPRECATION")
-                    val current = installed.longVersionCode
+                    val current = if (android.os.Build.VERSION.SDK_INT >= 28)
+                        installed.longVersionCode else installed.versionCode.toLong()
                     @Suppress("DEPRECATION")
-                    if (candidate.longVersionCode <= current) {
+                    val next = if (android.os.Build.VERSION.SDK_INT >= 28)
+                        candidate.longVersionCode else candidate.versionCode.toLong()
+                    if (next <= current) {
                         announce("Уже установлена актуальная версия.")
                         return@execute
                     }
