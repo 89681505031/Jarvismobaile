@@ -30,6 +30,7 @@ class MainActivity : Activity() {
     private lateinit var router: PhoneCommandRouter
     private lateinit var gigaChat: GigaChatClient
     private lateinit var speechInput: SpeechInputController
+    private lateinit var offlineWake: OfflineWakeEngine
     private var pendingMicStart = false
     private var pendingMicDiagnostics = false
     private var pendingWakePermission = false
@@ -78,6 +79,29 @@ class MainActivity : Activity() {
             }
         }
         setupSpeechRecognizer()
+        offlineWake = OfflineWakeEngine(
+            this,
+            onStatus = { state, message ->
+                voiceEvent("onJarvisWakeModel", state, message)
+                if (state == "model_needed" || state == "error")
+                    voiceEvent("onJarvisWakeStatus", state, message)
+                if (state == "listening")
+                    voiceEvent("onJarvisWakeStatus", "listening", message)
+            },
+            onMatch = { activation ->
+                wakeSessionActive = false
+                selectedPersona = activation.persona
+                prefs.edit().putString("persona", activation.persona).apply()
+                voiceEvent("onJarvisWakeDetected", activation.persona, activation.command)
+                if (activation.command.isBlank()) speak("Слушаю", resumeAfterSpeech = true)
+            }
+        )
+        // Old builds used repeating SpeechRecognizer sessions, causing audible
+        // system chimes. Never resume that legacy mode without the offline model.
+        if (wakeModeEnabled && !offlineWake.installed()) {
+            wakeModeEnabled = false
+            prefs.edit().putBoolean("wake_mode", false).apply()
+        }
 
         webView = WebView(this).apply {
             settings.javaScriptEnabled = true
@@ -101,55 +125,18 @@ class MainActivity : Activity() {
     }
 
     private fun setupSpeechRecognizer() {
+        // Android's recognizer is only used for an actual command, never
+        // restarted indefinitely while waiting for a name.
         speechInput = SpeechInputController(this,
-            onState = { state, message ->
-                if (wakeSessionActive) {
-                    val label = if (state == "listening") "Жду имя: Джарвис, Астра, Луна, Терра или Сайбер"
-                        else message
-                    voiceEvent("onJarvisWakeStatus", state, label)
-                } else voiceEvent("onJarvisSpeechState", state, message)
-            },
-            onText = { text ->
-                if (wakeSessionActive) {
-                    wakeSessionActive = false
-                    wakeFailures = 0
-                    val activation = WakeWordMatcher.parse(text)
-                    if (activation == null) {
-                        scheduleWakeRestart(750L)
-                    } else {
-                        selectedPersona = activation.persona
-                        prefs.edit().putString("persona", activation.persona).apply()
-                        voiceEvent("onJarvisWakeDetected", activation.persona, activation.command)
-                        if (activation.command.isBlank()) speak("Слушаю", resumeAfterSpeech = true)
-                    }
-                } else voiceEvent("onJarvisSpeechResult", text)
-            },
+            onState = { state, message -> voiceEvent("onJarvisSpeechState", state, message) },
+            onText = { text -> voiceEvent("onJarvisSpeechResult", text) },
             onError = { error ->
-                if (wakeSessionActive) {
-                    wakeSessionActive = false
-                    val silence = error.contains("Не удалось расслышать")
-                    wakeFailures = if (silence) 0 else wakeFailures + 1
-                    if (wakeFailures >= 5) {
-                        voiceEvent("onJarvisWakeStatus", "error",
-                            "Не удаётся удержать голосовой ввод: $error Выключите и включите ожидание имени после проверки Android.")
-                    } else {
-                        voiceEvent("onJarvisWakeStatus", "retry", "Ожидаю имя…")
-                        scheduleWakeRestart(if (silence) 900L else (wakeFailures * 1800L).coerceAtMost(9000L))
-                    }
-                } else {
-                    voiceEvent("onJarvisSpeechError", error)
-                    if (wakeModeEnabled && activityResumed && !diagnosticInProgress)
-                        scheduleWakeRestart(1600L)
-                }
+                voiceEvent("onJarvisSpeechError", error)
+                if (wakeModeEnabled && activityResumed && !diagnosticInProgress)
+                    scheduleWakeRestart(1700L)
             },
             onLevel = { level -> voiceEvent("onJarvisSpeechLevel", level) },
-            onUnavailable = {
-                if (wakeSessionActive) {
-                    wakeSessionActive = false
-                    voiceEvent("onJarvisWakeStatus", "error",
-                        "Нет системного распознавания речи. Включите голосовой ввод Android.")
-                } else startSystemSpeechInput()
-            })
+            onUnavailable = { startSystemSpeechInput() })
     }
 
     private fun cancelWakeRestart() {
@@ -171,18 +158,16 @@ class MainActivity : Activity() {
             wakeSessionActive || speechInput.isListening || microphonePermissionPending ||
             isFinishing || isDestroyed) return
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
-            voiceEvent("onJarvisWakeStatus", "error", "Для ожидания имени нужен доступ к микрофону.")
+            voiceEvent("onJarvisWakeStatus", "error", "Разрешите доступ к микрофону.")
             return
         }
-        val available = android.speech.SpeechRecognizer.isRecognitionAvailable(this) ||
-            (android.os.Build.VERSION.SDK_INT >= 31 &&
-                android.speech.SpeechRecognizer.isOnDeviceRecognitionAvailable(this))
-        if (!available) {
-            voiceEvent("onJarvisWakeStatus", "error", "В Android не найден сервис распознавания речи.")
+        if (!offlineWake.installed()) {
+            voiceEvent("onJarvisWakeStatus", "model_needed",
+                "Тихий режим требует офлайн-модель. Загрузите её один раз в настройках.")
             return
         }
         wakeSessionActive = true
-        speechInput.start(9_000L)
+        offlineWake.start()
     }
 
     private fun setWakeModeEnabled(enabled: Boolean) {
@@ -191,10 +176,8 @@ class MainActivity : Activity() {
             pendingWakePermission = false
             wakeModeEnabled = false
             prefs.edit().putBoolean("wake_mode", false).apply()
-            if (wakeSessionActive) {
-                wakeSessionActive = false
-                speechInput.cancel()
-            }
+            wakeSessionActive = false
+            offlineWake.stop()
             voiceEvent("onJarvisWakeModeChanged", false)
             voiceEvent("onJarvisWakeStatus", "off", "Ожидание имени отключено.")
             return
@@ -209,11 +192,18 @@ class MainActivity : Activity() {
             return
         }
         pendingWakePermission = false
+        if (!offlineWake.installed()) {
+            wakeModeEnabled = false
+            prefs.edit().putBoolean("wake_mode", false).apply()
+            voiceEvent("onJarvisWakeModeChanged", false)
+            voiceEvent("onJarvisWakeStatus", "model_needed",
+                "Загрузите офлайн-модель в настройках (около 46 МБ), затем включите ожидание имени.")
+            return
+        }
         wakeModeEnabled = true
-        wakeFailures = 0
         prefs.edit().putBoolean("wake_mode", true).apply()
         voiceEvent("onJarvisWakeModeChanged", true)
-        voiceEvent("onJarvisWakeStatus", "starting", "Ожидание имени включено только пока приложение открыто.")
+        voiceEvent("onJarvisWakeStatus", "starting", "Тихое ожидание включено, только пока приложение открыто.")
         scheduleWakeRestart(500L)
     }
 
@@ -221,9 +211,8 @@ class MainActivity : Activity() {
         if (!activityResumed || isFinishing || isDestroyed) return
         if (wakeSessionActive) {
             wakeSessionActive = false
-            speechInput.cancel()
             cancelWakeRestart()
-            mainHandler.postDelayed({ startListening() }, 400L)
+            offlineWake.stop { if (activityResumed) startListening() }
             return
         }
         cancelWakeRestart()
@@ -253,8 +242,7 @@ class MainActivity : Activity() {
         cancelWakeRestart()
         if (wakeSessionActive) {
             wakeSessionActive = false
-            speechInput.cancel()
-            mainHandler.postDelayed({ startConversationListening(durationMs) }, 400L)
+            offlineWake.stop { if (activityResumed) startConversationListening(durationMs) }
             return
         }
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) return
@@ -281,9 +269,13 @@ class MainActivity : Activity() {
         if (!activityResumed || isFinishing || isDestroyed) return
         if (diagnosticInProgress) return
         pendingMicDiagnostics = false
-        diagnosticInProgress = true
         cancelWakeRestart()
-        wakeSessionActive = false
+        if (wakeSessionActive) {
+            wakeSessionActive = false
+            offlineWake.stop { if (activityResumed) runMicrophoneDiagnostic() }
+            return
+        }
+        diagnosticInProgress = true
         speechInput.cancel()
         stopSpeech()
         val serviceAvailable = android.speech.SpeechRecognizer.isRecognitionAvailable(this)
@@ -378,6 +370,8 @@ class MainActivity : Activity() {
         activityResumed = false
         cancelWakeRestart()
         wakeSessionActive = false
+        offlineWake.stop()
+        voiceEvent("onJarvisWakeStatus", "paused", "Ожидание имени приостановлено: приложение свёрнуто.")
         diagnosticGeneration++
         diagnosticInterrupted = diagnosticInProgress
         diagnosticInProgress = false
@@ -416,6 +410,7 @@ class MainActivity : Activity() {
         stopSpeech()
         cancelWakeRestart()
         wakeSessionActive = false
+        offlineWake.stop()
         speechInput.cancel()
         val generation = speechGeneration
         isSpeaking = true
@@ -785,6 +780,10 @@ class MainActivity : Activity() {
 
         @JavascriptInterface fun startListening() { runOnUiThread { this@MainActivity.startListening() } }
         @JavascriptInterface fun getWakeModeEnabled(): Boolean = prefs.getBoolean("wake_mode", false)
+        @JavascriptInterface fun wakeModelInstalled(): Boolean = offlineWake.installed()
+        @JavascriptInterface fun installWakeModel() {
+            runOnUiThread { offlineWake.install() }
+        }
         @JavascriptInterface fun setWakeModeEnabled(enabled: Boolean) {
             runOnUiThread { this@MainActivity.setWakeModeEnabled(enabled) }
         }
@@ -797,6 +796,7 @@ class MainActivity : Activity() {
             // Text commands must stop ambient listening as well, not just the recognizer.
             wakeSessionActive = false
             cancelWakeRestart()
+            offlineWake.stop()
             speechInput.cancel()
         } }
         @JavascriptInterface fun openMicrophoneSettings() { runOnUiThread {
@@ -876,6 +876,7 @@ class MainActivity : Activity() {
         activityResumed = false
         wakeSessionActive = false
         cancelWakeRestart()
+        offlineWake.release()
         diagnosticGeneration++
         mainHandler.removeCallbacksAndMessages(null)
         backgroundExecutor.shutdownNow()

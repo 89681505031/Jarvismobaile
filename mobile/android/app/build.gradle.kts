@@ -21,8 +21,8 @@ android {
     buildTypes {
         getByName("debug") {
             if (System.getenv("JARVIS_DIAGNOSTIC") == "1") {
-                applicationIdSuffix = ".wake"
-                manifestPlaceholders["jarvisLabel"] = "J.A.R.V.I.S. WAKE"
+                applicationIdSuffix = ".quiet"
+                manifestPlaceholders["jarvisLabel"] = "J.A.R.V.I.S. QUIET"
             }
         }
     }
@@ -44,4 +44,6 @@ android {
 dependencies {
     testImplementation("junit:junit:4.13.2")
     implementation("androidx.core:core-ktx:1.15.0")
+    implementation("com.alphacephei:vosk-android:0.3.75@aar")
+    implementation("net.java.dev.jna:jna:5.18.1@aar")
 }
