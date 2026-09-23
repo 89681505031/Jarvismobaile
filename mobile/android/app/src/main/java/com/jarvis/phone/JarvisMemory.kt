@@ -67,6 +67,30 @@ class JarvisMemory(context: Context) {
         }
     }
 
+    /**
+     * Optional context sent to GigaChat ONLY when the user enables the memory
+     * sharing switch. Excludes birthday, habits, contact data and raw OS events.
+     * Chat turns are provided separately as bounded role-labelled messages.
+     */
+    fun approvedBrainFacts(): String = synchronized(lock) {
+        val facts = readArray("facts")
+        val name = getUserName().take(80)
+        buildString {
+            if (name.isNotBlank()) append("Имя: ").append(name).append("\n")
+            val start = maxOf(0, facts.length() - 10)
+            for (i in start until facts.length()) {
+                val fact = facts.optString(i).trim().take(220)
+                if (fact.isNotBlank()) append("Сохранённая заметка: ").append(fact).append("\n")
+            }
+        }.trim().take(2500)
+    }
+
+    fun clearChatHistory(): Int = synchronized(lock) {
+        val count = readArray("dialogues").length()
+        prefs.edit().remove("dialogues").apply()
+        count
+    }
+
 
     fun recordHabit(text: String) {
         val category = habitCategory(text)

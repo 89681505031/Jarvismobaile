@@ -5,7 +5,7 @@ const fs = require('node:fs');
 const source = fs.readFileSync('mobile/android/app/src/main/assets/app.js', 'utf8');
 function load() {
   class Element {
-    constructor() { this.value = ''; this.textContent = ''; this.children = []; this.hidden = false; this.attrs = {}; }
+    constructor() { this.value = ''; this.textContent = ''; this.children = []; this.hidden = false; this.attrs = {}; this.dataset = {}; }
     setAttribute(k, v) { this.attrs[k] = v; }
     addEventListener() {}
     appendChild(child) { this.children.push(child); }
@@ -187,4 +187,57 @@ test('PLUS local vision only starts after a user tap', () => {
   elements.get('visionCamera').onclick();
   elements.get('visionPicker').onclick();
   assert.equal(taps,2);
+});
+
+test('GigaChat brain is visible, never shows the secret, and can be tested explicitly', () => {
+  const { context, elements } = load();
+  const calls = [];
+  context.window.AndroidJarvis.configureGigaChatBrain = (key,scope,model) => {
+    calls.push({key,scope,model});
+    return 'GigaChat настроен';
+  };
+  context.window.AndroidJarvis.testGigaChatBrain = () => calls.push('test');
+  const key=context.document.getElementById('gigaApiKey');
+  key.value = 'example-secret-never-display';
+  context.document.getElementById('gigaScope').value='GIGACHAT_API_PERS';
+  context.document.getElementById('gigaModel').value='GigaChat-2';
+  context.document.getElementById('saveGigaBrain').onclick();
+  assert.deepEqual(calls, [{key:'example-secret-never-display',
+    scope:'GIGACHAT_API_PERS', model:'GigaChat-2'}]);
+  assert.equal(key.value,'');
+  assert.ok(!context.document.getElementById('brainStatus').textContent.includes('example-secret'));
+  context.document.getElementById('testGigaBrain').onclick();
+  assert.equal(calls.length,2);
+  assert.equal(calls[1],'test');
+  assert.equal(context.document.getElementById('testGigaBrain').disabled,true);
+  context.window.onJarvisBrainState('connected','GigaChat подключён');
+  assert.equal(context.document.getElementById('testGigaBrain').disabled,false);
+  assert.match(context.document.getElementById('brainBadge').textContent,/НА СВЯЗИ/);
+});
+test('GigaChat memory and message sharing remain opt-in and independently switchable',()=>{
+  const {context}=load();
+  const prefs=[];
+  context.window.AndroidJarvis.setGigaBrainMemory = enabled => prefs.push(['memory',enabled]);
+  context.window.AndroidJarvis.setGigaShareMessages = enabled => prefs.push(['messages',enabled]);
+  const memory=context.document.getElementById('gigaBrainMemory');
+  const share=context.document.getElementById('gigaShareMessages');
+  assert.equal(memory.checked,false);
+  assert.equal(share.checked,false);
+  memory.onchange({target:{checked:true}});
+  share.onchange({target:{checked:false}});
+  assert.deepEqual(prefs,[['memory',true],['messages',false]]);
+});
+test('GigaChat disconnect never deletes local chat history automatically',()=>{
+  const {context}=load();
+  const calls=[];
+  context.window.AndroidJarvis.disconnectGigaChatBrain = () => {
+    calls.push('disconnect'); return 'Ключ удалён; история осталась';
+  };
+  context.window.AndroidJarvis.clearGigaBrainHistory = () => {
+    calls.push('history'); return 'Очищено';
+  };
+  context.document.getElementById('disconnectGigaBrain').onclick();
+  assert.deepEqual(calls,['disconnect']);
+  context.document.getElementById('clearGigaHistory').onclick();
+  assert.deepEqual(calls,['disconnect','history']);
 });

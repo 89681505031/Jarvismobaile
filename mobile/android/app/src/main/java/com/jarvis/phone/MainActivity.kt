@@ -27,12 +27,16 @@ import java.net.HttpURLConnection
 import java.net.URL
 import java.util.Locale
 import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.AtomicBoolean
 
 class MainActivity : Activity() {
 
     private lateinit var webView: WebView
     private lateinit var router: PhoneCommandRouter
     private lateinit var gigaChat: GigaChatClient
+    private val brainGeneration = AtomicInteger(0)
+    private val brainTestRunning = AtomicBoolean(false)
     private lateinit var speechInput: SpeechInputController
     private lateinit var offlineWake: OfflineWakeEngine
     private var pendingMicStart = false
@@ -789,10 +793,10 @@ class MainActivity : Activity() {
 
                 if (items.isEmpty()) throw lastError ?: IllegalStateException("В новостной ленте нет материалов.")
                 val prompt = "Сделай краткую нейтральную голосовую сводку свежих новостей на русском языке. Назови 5-6 главных тем по заголовкам ниже, по 1-2 предложения на тему. Не придумывай факты и явно отделяй заголовок от неподтвержденных деталей. Заголовки: " + items.joinToString(" | ")
-                val answer = gigaChat.ask(prompt, selectedPersona, "")
-                val finalText = if (answer.startsWith("В настройках J.A.R.V.I.S.")) {
-                    "Свежие новости: " + items.take(5).joinToString(". ")
-                } else answer
+                val response = gigaChat.askConversation(prompt, selectedPersona)
+                val finalText = if (!response.success) {
+                    "Свежие новости по заголовкам: " + items.take(5).joinToString(". ")
+                } else response.text
                 runOnUiThread {
                     if (isFinishing || isDestroyed) return@runOnUiThread
                     if (::webView.isInitialized) {
@@ -841,10 +845,11 @@ class MainActivity : Activity() {
                     "Я открыл WhatsApp, но не смог получить текст последнего сообщения. Проверьте доступ J.A.R.V.I.S. к уведомлениям и специальным возможностям."
                 } else {
                     val prompt = "Проанализируй последнее сообщение WhatsApp по данным ниже. Ответь по-русски коротко и естественно для голосового ассистента. Обязательно назови имя отправителя или название группы, если оно видно. Затем объясни простыми словами, о чём сообщение, что человек или группа сообщает, просит или хочет. Не выдумывай отсутствующие сведения и скажи, если данных недостаточно. Данные WhatsApp:\n" + source
-                    val result = gigaChat.ask(prompt, selectedPersona, "")
-                    if (result.startsWith("В настройках J.A.R.V.I.S.")) {
-                        "Последнее сообщение: ${notification?.title.orEmpty()}. ${notification?.text.orEmpty()}".trim()
-                    } else result
+                    if (!prefs.getBoolean("gigachat_share_messages", false)) {
+                        "Последнее сообщение без облачного анализа:\n" +
+                            source.take(800) +
+                            "\nЧтобы отправить текст для анализа GigaChat, включите отдельное разрешение в настройках."
+                    } else gigaChat.askConversation(prompt, selectedPersona).text
                 }
 
                 runOnUiThread {
@@ -867,21 +872,42 @@ class MainActivity : Activity() {
         }
     }
 
+    /**
+     * All non-device questions are answered by GigaChat. Android commands still
+     * use the native permission-aware router; the model cannot silently call APIs.
+     */
     private fun sendToGigaChat(text: String, memoryText: String = text) {
+        val ticket = brainGeneration.incrementAndGet()
+        val persona = selectedPersona
+        runOnUiThread {
+            voiceEvent("onJarvisBrainState", "thinking", "GigaChat обрабатывает вопрос…")
+        }
         backgroundExecutor.execute {
-            val remote = cloudMemory.recall(memoryText)
-            val context = memory.memoryContext() + if (remote.isNotBlank()) "\n\nРелевантные воспоминания:\n" + remote else ""
-            val answer = gigaChat.ask(text, selectedPersona, context)
-            memory.rememberTurn(memoryText, answer)
-            runOnUiThread {
-                if (isFinishing || isDestroyed) return@runOnUiThread
-                if (::webView.isInitialized) {
-                    val escaped = JSONObject.quote(answer)
-                    webView.evaluateJavascript("window.onGigaChatResult && window.onGigaChatResult($escaped)", null)
-                }
-                speak(answer, resumeAfterSpeech = true)
+            val useHistory = prefs.getBoolean("gigachat_memory_enabled", false)
+            val turns = if (useHistory) memory.recentDialogues().takeLast(6) else emptyList()
+            val remote = if (useHistory) cloudMemory.recall(memoryText).take(2500) else ""
+            val context = if (!useHistory) "" else buildString {
+                append(memory.approvedBrainFacts())
+                if (remote.isNotBlank()) append("\nРелевантные заметки:\n").append(remote)
             }
-            cloudMemory.record(memoryText, answer)
+            val response = gigaChat.askConversation(memoryText, persona, context, turns)
+            // If a second question was asked during this one, only deliver the
+            // newest result. In particular, don't speak stale voice replies.
+            if (ticket != brainGeneration.get()) return@execute
+            if (response.success) {
+                memory.rememberTurn(memoryText, response.text)
+                if (useHistory) cloudMemory.record(memoryText, response.text)
+            }
+            runOnUiThread {
+                if (ticket != brainGeneration.get() || isFinishing || isDestroyed) return@runOnUiThread
+                voiceEvent(
+                    "onJarvisBrainState",
+                    if (response.success) "ready" else "error",
+                    if (response.success) "Ответ GigaChat получен" else response.text
+                )
+                voiceEvent("onGigaChatResult", response.text)
+                if (response.success) speak(response.text, resumeAfterSpeech = true)
+            }
         }
     }
 
@@ -1209,9 +1235,121 @@ class MainActivity : Activity() {
         fun setApiKeys(fish: String, giga: String): String {
             val editor = prefs.edit()
             if (fish.isNotBlank()) editor.putString("fish_api_key", fish)
-            if (giga.isNotBlank()) editor.putString("gigachat_api_key", giga)
+            if (giga.isNotBlank()) {
+                editor.putString("gigachat_api_key", giga)
+                editor.remove("gigachat_verified_at")
+                gigaChat.invalidateToken()
+            }
             editor.apply()
             return "Fish Audio: ${if (fish.isNotBlank() || prefs.getString("fish_api_key", "").orEmpty().isNotBlank()) "✓ настроен" else "не настроен"} · GigaChat: ${if (giga.isNotBlank() || prefs.getString("gigachat_api_key", "").orEmpty().isNotBlank()) "✓ настроен" else "не настроен"}"
+        }
+
+        @JavascriptInterface
+        fun getGigaBrainStatus(): String = JSONObject().apply {
+            put("configured", gigaChat.configured())
+            put("model", gigaChat.modelName())
+            put("scope", gigaChat.scopeName())
+            put("memory", prefs.getBoolean("gigachat_memory_enabled", false))
+            put("shareMessages", prefs.getBoolean("gigachat_share_messages", false))
+            put("verifiedAt", prefs.getLong("gigachat_verified_at", 0L))
+        }.toString()
+
+        @JavascriptInterface
+        fun configureGigaChatBrain(key: String, scope: String, model: String): String {
+            // Key is never returned to JS or inserted in a status message.
+            val k = key.trim()
+            if (k.length > 8192) return "Слишком длинный ключ авторизации."
+            if (scope != GigaChatBrainPolicy.validScope(scope) ||
+                model != GigaChatBrainPolicy.validModel(model))
+                return "Выберите доступную модель и правильный тип API."
+            if (k.isBlank() && !gigaChat.configured()) return "Сначала введите ключ авторизации GigaChat."
+            val edit = prefs.edit()
+                .putString("gigachat_scope", scope)
+                .putString("gigachat_model", model)
+                .remove("gigachat_verified_at")
+            if (k.isNotBlank()) edit.putString("gigachat_api_key", k)
+            edit.apply()
+            gigaChat.invalidateToken()
+            runOnUiThread {
+                voiceEvent("onJarvisBrainState", "saved",
+                    "Настройки GigaChat сохранены. Проверка связи ещё не проводилась.")
+            }
+            return "GigaChat настроен. Нажмите «Проверить подключение»."
+        }
+
+        @JavascriptInterface
+        fun testGigaChatBrain() {
+            if (!brainTestRunning.compareAndSet(false, true)) return
+            runOnUiThread { voiceEvent("onJarvisBrainState", "testing", "Проверяю GigaChat…") }
+            val originalKey = prefs.getString("gigachat_api_key", "").orEmpty()
+            val originalScope = gigaChat.scopeName()
+            val originalModel = gigaChat.modelName()
+            backgroundExecutor.execute {
+                try {
+                    val result = gigaChat.testConnection()
+                    val unchanged = originalKey.isNotBlank() &&
+                        prefs.getString("gigachat_api_key", "").orEmpty() == originalKey &&
+                        gigaChat.scopeName() == originalScope &&
+                        gigaChat.modelName() == originalModel
+                    if (result.success && unchanged) {
+                        prefs.edit().putLong("gigachat_verified_at", System.currentTimeMillis()).apply()
+                    } else prefs.edit().remove("gigachat_verified_at").apply()
+                    runOnUiThread {
+                        voiceEvent("onJarvisBrainState",
+                            if (result.success && unchanged) "connected" else "error",
+                            if (result.success && unchanged)
+                                "GigaChat подключён. Теперь он отвечает на вопросы JARVIS."
+                            else if (!unchanged) "Настройки GigaChat изменились во время проверки. Проверьте ещё раз."
+                            else result.text)
+                    }
+                } finally {
+                    brainTestRunning.set(false)
+                }
+            }
+        }
+
+        @JavascriptInterface
+        fun setGigaBrainMemory(enabled: Boolean) {
+            prefs.edit().putBoolean("gigachat_memory_enabled", enabled).apply()
+            runOnUiThread {
+                voiceEvent("onJarvisBrainState", "memory",
+                    if (enabled) "Контекст памяти будет передаваться GigaChat при вопросах."
+                    else "Локальная история и заметки больше не передаются GigaChat.")
+            }
+        }
+
+        @JavascriptInterface
+        fun setGigaShareMessages(enabled: Boolean) {
+            prefs.edit().putBoolean("gigachat_share_messages", enabled).apply()
+            runOnUiThread {
+                voiceEvent("onJarvisBrainState", "privacy",
+                    if (enabled) "Анализ выбранных сообщений через GigaChat разрешён."
+                    else "Передача сообщений GigaChat отключена.")
+            }
+        }
+
+        @JavascriptInterface
+        fun clearGigaBrainHistory(): String {
+            val count = memory.clearChatHistory()
+            brainGeneration.incrementAndGet()
+            return "Удалено локальных диалогов: $count. Данные внешнего сервиса не затронуты."
+        }
+
+        @JavascriptInterface
+        fun disconnectGigaChatBrain(): String {
+            prefs.edit()
+                .remove("gigachat_api_key")
+                .remove("gigachat_verified_at")
+                .putBoolean("gigachat_memory_enabled", false)
+                .putBoolean("gigachat_share_messages", false)
+                .apply()
+            gigaChat.invalidateToken()
+            brainGeneration.incrementAndGet()
+            runOnUiThread {
+                voiceEvent("onJarvisBrainState", "disconnected",
+                    "Ключ GigaChat удалён из приложения. Голосовые команды телефона доступны.")
+            }
+            return "GigaChat отключён. Локальная история осталась на устройстве."
         }
 
         @JavascriptInterface
