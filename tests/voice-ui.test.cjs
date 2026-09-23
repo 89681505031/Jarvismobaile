@@ -12,13 +12,14 @@ function load() {
     querySelector(tag) { return this.children.find(child => child.tag === tag); }
   }
   const elements = new Map();
-  const calls = { command: [], speak: [], start: 0, windows: 0 };
+  const calls = { command: [], speak: [], start: 0, windows: 0, diagnostics: 0 };
   const context = { document: { getElementById(id) {
     if (!elements.has(id)) elements.set(id, new Element()); return elements.get(id);
   }, createElement(tag) { const e = new Element(); e.tag = tag; return e; }, querySelectorAll() { return []; } },
   localStorage: { getItem() { return 'Test'; }, setItem() {} }, window: { AndroidJarvis: {
     command(text) { calls.command.push(text); return 'Ответ'; }, speak(text) { calls.speak.push(text); },
     startListening() { calls.start++; }, stopListening() {}, startConversationWindow() { calls.windows++; },
+    diagnoseMicrophone() { calls.diagnostics++; },
     setPersona() {}, listApps() { return JSON.stringify([{ label: '<img src=x onerror=alert(1)>', packageName: 'app', allowed: false }]); }
   } } };
   vm.createContext(context);
@@ -72,4 +73,25 @@ test('external app labels are inserted as text, not HTML', () => {
   const label = elements.get('appsList').children[0].children[0];
   assert.equal(label.textContent, '<img src=x onerror=alert(1)>');
   assert.equal(label.innerHTML, undefined);
+});
+
+test('mic diagnostics are explicit and prevent competing recognizer sessions', () => {
+  const { context, voice, calls, elements } = load();
+  elements.get('diagnoseMic').onclick();
+  assert.equal(calls.diagnostics, 1);
+  assert.equal(elements.get('diagnoseMic').disabled, true);
+  context.startListening();
+  assert.equal(calls.start, 0);
+  voice.onJarvisMicDiagnostic('ok', 'Аудиопоток работает.');
+  assert.equal(elements.get('diagnoseMic').disabled, false);
+  assert.equal(elements.get('micDiagnostics').textContent, 'Аудиопоток работает.');
+  context.startListening();
+  assert.equal(calls.start, 1);
+});
+test('missing native diagnostic bridge shows an actionable error', () => {
+  const { context, elements, voice } = load();
+  delete context.window.AndroidJarvis.diagnoseMicrophone;
+  elements.get('diagnoseMic').onclick();
+  assert.equal(elements.get('diagnoseMic').disabled, false);
+  assert.equal(elements.get('micDiagnostics').attrs['data-status'], 'error');
 });
