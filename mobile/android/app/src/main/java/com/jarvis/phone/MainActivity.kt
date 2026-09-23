@@ -36,6 +36,12 @@ class MainActivity : Activity() {
     private var pendingWakePermission = false
     private var microphonePermissionPending = false
     private var wakeModeEnabled = false
+    private var backgroundWakeEnabled = false
+    private var pendingBackgroundMic = false
+    private var pendingBackgroundNotification = false
+    private var pageReady = false
+    private var pendingBackgroundCommand: String? = null
+    private var systemSpeechOpen = false
     private var wakeSessionActive = false
     private var wakeFailures = 0
     private var wakeRestart: Runnable? = null
@@ -64,6 +70,9 @@ class MainActivity : Activity() {
         gigaChat = GigaChatClient(this)
         selectedPersona = prefs.getString("persona", "J.A.R.V.I.S.") ?: "J.A.R.V.I.S."
         wakeModeEnabled = prefs.getBoolean("wake_mode", false)
+        backgroundWakeEnabled = prefs.getBoolean("background_wake", false)
+        pendingBackgroundCommand = intent?.takeIf { it.action == WakeForegroundService.ACTION_OPEN_COMMAND }
+            ?.getStringExtra(WakeForegroundService.EXTRA_COMMAND)?.take(240)
         fishAudioTts = FishAudioTts(this)
         memory = JarvisMemory(this)
         cloudMemory = RedisMemoryGateway(this)
@@ -110,12 +119,32 @@ class MainActivity : Activity() {
             settings.allowContentAccess = false
             webViewClient = object : WebViewClient() {
                 override fun shouldOverrideUrlLoading(view: WebView?, request: android.webkit.WebResourceRequest?): Boolean = true
+                override fun onPageFinished(view: WebView?, url: String?) {
+                    pageReady = true
+                    deliverBackgroundCommand()
+                }
             }
             addJavascriptInterface(AndroidBridge(), "AndroidJarvis")
             loadUrl("file:///android_asset/index.html")
         }
         setContentView(webView)
 
+    }
+
+    private fun deliverBackgroundCommand() {
+        if (!pageReady || !activityResumed || pendingBackgroundCommand.isNullOrBlank()) return
+        val text = pendingBackgroundCommand!!
+        pendingBackgroundCommand = null
+        voiceEvent("onJarvisPendingBackgroundCommand", text)
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        if (intent.action == WakeForegroundService.ACTION_OPEN_COMMAND) {
+            pendingBackgroundCommand = intent.getStringExtra(WakeForegroundService.EXTRA_COMMAND)?.take(240)
+            deliverBackgroundCommand()
+        }
     }
 
     private fun voiceEvent(name: String, vararg values: Any) {
@@ -173,6 +202,7 @@ class MainActivity : Activity() {
     private fun setWakeModeEnabled(enabled: Boolean) {
         cancelWakeRestart()
         if (!enabled) {
+            if (backgroundWakeEnabled) setBackgroundWakeEnabled(false)
             pendingWakePermission = false
             wakeModeEnabled = false
             prefs.edit().putBoolean("wake_mode", false).apply()
@@ -205,6 +235,76 @@ class MainActivity : Activity() {
         voiceEvent("onJarvisWakeModeChanged", true)
         voiceEvent("onJarvisWakeStatus", "starting", "Тихое ожидание включено, только пока приложение открыто.")
         scheduleWakeRestart(500L)
+    }
+
+    private fun startBackgroundServiceIfEligible() {
+        if (!backgroundWakeEnabled || !wakeModeEnabled || !activityResumed ||
+            isFinishing || isDestroyed || !offlineWake.installed()) return
+        if (android.os.Build.VERSION.SDK_INT >= 33 &&
+            ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+            setBackgroundWakeEnabled(false)
+            voiceEvent("onJarvisBackgroundWakeStatus", "error",
+                "Для видимого выключателя фонового микрофона разрешите уведомления JARVIS.")
+            return
+        }
+        if (WakeForegroundService.active != null) return
+        // Must happen while this Activity is visible on Android 12–15:
+        // calling startForegroundService from onPause is too late.
+        try {
+            ContextCompat.startForegroundService(
+                this, Intent(this, WakeForegroundService::class.java)
+                    .setAction(WakeForegroundService.ACTION_START)
+            )
+            voiceEvent("onJarvisBackgroundWakeStatus", "ready",
+                "Фоновый режим готов. При сворачивании микрофон перейдёт в службу с постоянным уведомлением.")
+        } catch (_: Exception) {
+            setBackgroundWakeEnabled(false)
+            voiceEvent("onJarvisBackgroundWakeStatus", "error",
+                "Android запретил запуск фонового режима. Откройте JARVIS и попробуйте снова.")
+        }
+    }
+
+    private fun setBackgroundWakeEnabled(enabled: Boolean) {
+        if (!enabled) {
+            backgroundWakeEnabled = false
+            pendingBackgroundMic = false
+            pendingBackgroundNotification = false
+            prefs.edit().putBoolean("background_wake", false).apply()
+            WakeForegroundService.shouldListenInBackground = false
+            stopService(Intent(this, WakeForegroundService::class.java))
+            voiceEvent("onJarvisBackgroundWakeChanged", false)
+            voiceEvent("onJarvisBackgroundWakeStatus", "off", "Работа в фоне отключена.")
+            return
+        }
+        if (!wakeModeEnabled || !offlineWake.installed()) {
+            voiceEvent("onJarvisBackgroundWakeChanged", false)
+            voiceEvent("onJarvisBackgroundWakeStatus", "error",
+                "Сначала установите офлайн-модель и включите активацию по имени.")
+            return
+        }
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+            pendingBackgroundMic = true
+            voiceEvent("onJarvisBackgroundWakeStatus", "permission", "Разрешите микрофон.")
+            if (!microphonePermissionPending) {
+                microphonePermissionPending = true
+                ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.RECORD_AUDIO), 7011)
+            }
+            return
+        }
+        if (android.os.Build.VERSION.SDK_INT >= 33 &&
+            ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+            pendingBackgroundNotification = true
+            voiceEvent("onJarvisBackgroundWakeStatus", "permission",
+                "Разрешите уведомления: в них находится видимая кнопка выключения фонового микрофона.")
+            ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.POST_NOTIFICATIONS), 7013)
+            return
+        }
+        pendingBackgroundMic = false
+        pendingBackgroundNotification = false
+        backgroundWakeEnabled = true
+        prefs.edit().putBoolean("background_wake", true).apply()
+        voiceEvent("onJarvisBackgroundWakeChanged", true)
+        startBackgroundServiceIfEligible()
     }
 
     private fun startListening() {
@@ -303,6 +403,7 @@ class MainActivity : Activity() {
     }
 
     private fun startSystemSpeechInput() {
+        systemSpeechOpen = true
         val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
             putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
             putExtra(RecognizerIntent.EXTRA_LANGUAGE, "ru-RU")
@@ -310,6 +411,7 @@ class MainActivity : Activity() {
         }
         try { startActivityForResult(intent, 7012) }
         catch (_: Exception) {
+            systemSpeechOpen = false
             voiceEvent("onJarvisSpeechError", "В Android нет доступного голосового ввода. Включите или установите сервис распознавания речи, затем повторите.")
         }
     }
@@ -317,6 +419,7 @@ class MainActivity : Activity() {
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
         if (requestCode != 7012) return
+        systemSpeechOpen = false
         val text = data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)?.firstOrNull().orEmpty()
         if (resultCode == RESULT_OK && text.isNotBlank()) {
             voiceEvent("onJarvisSpeechState", "listening", "Речь распознана.")
