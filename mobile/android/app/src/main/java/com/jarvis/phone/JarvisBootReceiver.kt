@@ -30,6 +30,7 @@ class JarvisBootReceiver : BroadcastReceiver() {
             return
         }
 
+        JarvisReminders(context).restoreAfterBoot()
         val manager = context.getSystemService(NotificationManager::class.java) ?: return
         manager.createNotificationChannel(
             NotificationChannel(
