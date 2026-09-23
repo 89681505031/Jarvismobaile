@@ -141,7 +141,11 @@ class MainActivity : Activity() {
                     if (activation.command.isBlank()) speak("Слушаю", resumeAfterSpeech = true)
                 }
             },
-            stayOpenOnMatch = true
+            stayOpenOnMatch = true,
+            onVoiceActivity = { strength ->
+                if (activityResumed && wakeModeEnabled && !isSpeaking)
+                    voiceEvent("onJarvisWakeActivity", strength)
+            }
         )
         // Old builds used repeating SpeechRecognizer sessions, causing audible
         // system chimes. Never resume that legacy mode without the offline model.
@@ -606,6 +610,7 @@ class MainActivity : Activity() {
     }
 
     private fun stopSpeech() {
+        val wasSpeaking = isSpeaking
         speechGeneration++
         isSpeaking = false
         resumeListeningAfterSpeech = false
@@ -613,6 +618,7 @@ class MainActivity : Activity() {
         fishAudioTts.stop()
         speechTimeout?.let { mainHandler.removeCallbacks(it) }
         speechTimeout = null
+        if (wasSpeaking) voiceEvent("onJarvisSpeakState", "stop")
     }
 
     private fun finishSpeech(generation: Long) {
@@ -622,6 +628,7 @@ class MainActivity : Activity() {
             speechTimeout?.let { mainHandler.removeCallbacks(it) }
             speechTimeout = null
             isSpeaking = false
+            voiceEvent("onJarvisSpeakState", "stop")
             val resume = resumeListeningAfterSpeech
             resumeListeningAfterSpeech = false
             if (resume && activityResumed) startConversationListening(12_000)
@@ -645,6 +652,9 @@ class MainActivity : Activity() {
         isSpeaking = true
         resumeListeningAfterSpeech = resumeAfterSpeech
         voiceEvent("onJarvisSpeechState", "speaking", "J.A.R.V.I.S. отвечает. Нажмите на круг, чтобы прервать.")
+        // Variant A: JS synthesizes the reactor pulse only while native TTS
+        // actually owns the speech lifecycle. No fabricated audio amplitude.
+        voiceEvent("onJarvisSpeakState", "start", text.length)
         speechTimeout = Runnable {
             if (generation == speechGeneration) {
                 tts?.stop()
