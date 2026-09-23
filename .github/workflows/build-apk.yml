@@ -73,13 +73,13 @@ jobs:
           fi
       - name: Preserve standard APK
         run: cp mobile/android/app/build/outputs/apk/debug/app-debug.apk jarvis-phone-microphone-fixed.apk
-      - name: Build side-by-side diagnostic APK
+      - name: Build side-by-side wake APK
         working-directory: mobile/android
         env:
           JARVIS_DIAGNOSTIC: "1"
         run: gradle --no-daemon assembleDebug
       - name: Preserve diagnostic APK
-        run: cp mobile/android/app/build/outputs/apk/debug/app-debug.apk jarvis-phone-diagnostic.apk
+        run: cp mobile/android/app/build/outputs/apk/debug/app-debug.apk jarvis-phone-wake.apk
       - uses: actions/upload-artifact@v4
         with:
           name: jarvis-phone-microphone-fixed
@@ -87,6 +87,6 @@ jobs:
           if-no-files-found: error
       - uses: actions/upload-artifact@v4
         with:
-          name: jarvis-phone-diagnostic
-          path: jarvis-phone-diagnostic.apk
+          name: jarvis-phone-wake
+          path: jarvis-phone-wake.apk
           if-no-files-found: error
