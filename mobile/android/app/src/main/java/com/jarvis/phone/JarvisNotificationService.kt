@@ -55,13 +55,17 @@ class JarvisNotificationService : NotificationListenerService() {
         val fallbackTitle = extras.getCharSequence(Notification.EXTRA_TITLE)?.toString()?.trim().orEmpty()
         val fallbackText = extras.getCharSequence(Notification.EXTRA_TEXT)?.toString()?.trim().orEmpty()
 
-        val styledMessage = try {
-            extras.getParcelableArray(Notification.EXTRA_MESSAGES)
-                ?.let { Notification.MessagingStyle.Message.getMessagesFromBundleArray(it) }
-                ?.lastOrNull()
-        } catch (_: Exception) {
-            null
-        }
+        // Android exposes MessagingStyle.getMessagesFromBundleArray only on API 30+.
+        // Older supported phones still receive the notification title/text.
+        val styledMessage = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
+            try {
+                extras.getParcelableArray(Notification.EXTRA_MESSAGES)
+                    ?.let { Notification.MessagingStyle.Message.getMessagesFromBundleArray(it) }
+                    ?.lastOrNull()
+            } catch (_: Exception) {
+                null
+            }
+        } else null
 
         val title = styledMessage?.sender?.toString()?.trim().orEmpty().ifBlank { fallbackTitle }
         val text = styledMessage?.text?.toString()?.trim().orEmpty().ifBlank { fallbackText }
