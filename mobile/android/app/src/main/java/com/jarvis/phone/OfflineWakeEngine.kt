@@ -203,7 +203,7 @@ class OfflineWakeEngine(
                                 .coerceIn(0.3f, 0.82f)
                             ui.post {
                                 if (!disposed && requested && generation == ticket)
-                                    onVoiceActivity.invoke(strength)
+                                    onVoiceActivity?.invoke(strength)
                             }
                         }
                         override fun onResult(hypothesis: String) { accept(hypothesis, "text", ticket) }
