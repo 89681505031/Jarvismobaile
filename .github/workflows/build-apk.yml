@@ -2,10 +2,12 @@ name: Build Jarvis Android APK
 
 on:
   workflow_dispatch:
+  workflow_call:
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     permissions:
       contents: read
     steps:
@@ -16,19 +18,8 @@ jobs:
       - name: Verify memory gateway
         working-directory: memory-gateway
         run: npm ci && npm test
-      - name: Unpack Android project
-        run: unzip -q mobile_fixed.zip
-      - name: Normalize Kotlin line endings
-        run: |
-          sed -i 's/\r$//' mobile/android/app/src/main/java/com/jarvis/phone/MainActivity.kt
-          sed -i 's/\r$//' mobile/android/app/src/main/java/com/jarvis/phone/JarvisWakeService.kt
-          sed -i 's/\r$//' mobile/android/app/src/main/java/com/jarvis/phone/GigaChatClient.kt
-      - name: Apply microphone sensitivity fix
-        run: patch -p1 < patches/microphone-sensitivity.patch
-      - name: Apply GigaChat and wake-service fix
-        run: python3 scripts/apply_runtime_fixes.py
-      - name: Add optional Redis Agent Memory
-        run: python3 scripts/apply_redis_memory.py
+      - name: Verify voice interface
+        run: node --test tests/voice-ui.test.cjs
       - uses: actions/setup-java@v5
         with:
           distribution: temurin
@@ -48,9 +39,20 @@ jobs:
           else
             echo "::warning::JARVIS_DEBUG_KEYSTORE_B64 is not configured; APK signature may change between runners."
           fi
+      - name: Set APK version
+        run: |
+          echo "JARVIS_VERSION_CODE=$((1000 + GITHUB_RUN_NUMBER))" >> "$GITHUB_ENV"
+          echo "JARVIS_VERSION_NAME=0.3.${GITHUB_RUN_NUMBER}" >> "$GITHUB_ENV"
       - name: Build debug APK
         working-directory: mobile/android
-        run: gradle --no-daemon assembleDebug
+        run: gradle --no-daemon testDebugUnitTest lintDebug assembleDebug
+      - name: Upload test and lint reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-verification-reports
+          path: mobile/android/app/build/reports/
+          if-no-files-found: ignore
       - name: Verify persistent APK signing
         env:
           JARVIS_DEBUG_KEYSTORE_B64: ${{ secrets.JARVIS_DEBUG_KEYSTORE_B64 }}

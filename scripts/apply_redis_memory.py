@@ -1,5 +1,9 @@
 from pathlib import Path
 
+# Archived migration only: never rewrite the maintained Android sources.
+if Path("mobile/android/app/src/main/java/com/jarvis/phone/SpeechInputController.kt").exists():
+    raise SystemExit("Legacy patch disabled: build mobile/android directly; see README.md")
+
 root = Path('mobile/android/app/src/main')
 java = root / 'java/com/jarvis/phone'
 m = java / 'MainActivity.kt'

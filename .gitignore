@@ -30,3 +30,8 @@ bin/
 # Local build artifacts
 node_modules/
 __pycache__/
+.gradle/
+**/build/
+local.properties
+*.jks
+*.keystore
