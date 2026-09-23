@@ -19,14 +19,17 @@ import java.util.concurrent.Executors
 import java.util.zip.ZipInputStream
 
 /**
- * One sustained, keyless on-device microphone session for foreground-only wake names.
+ * One sustained, keyless on-device microphone session. A user-initiated
+ * microphone foreground service can also own it when the app is minimized.
  * No SpeechRecognizer restarts, tones, network requests or saved audio while listening.
  * The separate optional Vosk Russian model is downloaded only at an explicit tap.
  */
 class OfflineWakeEngine(
     private val context: Context,
     private val onStatus: (String, String) -> Unit,
-    private val onMatch: (WakeWordMatcher.Activation) -> Unit
+    private val onMatch: (WakeWordMatcher.Activation) -> Unit,
+    private val stayOpenOnMatch: Boolean = false,
+    private val onUtterance: ((String) -> Unit)? = null
 ) {
     companion object {
         private const val URL_MODEL =
@@ -214,9 +217,12 @@ class OfflineWakeEngine(
     private fun accept(json: String, field: String, ticket: Int) {
         if (disposed || !requested || ticket != generation) return
         val text = try { JSONObject(json).optString(field).trim() } catch (_: Exception) { "" }
-        val match = WakeWordMatcher.parse(text) ?: return
-        stop()
-        onMatch(match)
+        if (text.isBlank()) return
+        val match = WakeWordMatcher.parse(text)
+        if (match != null) {
+            if (!stayOpenOnMatch) stop()
+            onMatch(match)
+        } else onUtterance?.invoke(text)
     }
 
     fun stop(onStopped: (() -> Unit)? = null) {
