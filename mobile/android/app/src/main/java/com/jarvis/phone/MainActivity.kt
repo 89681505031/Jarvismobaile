@@ -34,6 +34,8 @@ class MainActivity : Activity() {
     private var pendingMicDiagnostics = false
     private var microphonePermissionPending = false
     @Volatile private var diagnosticGeneration = 0
+    private var diagnosticInProgress = false
+    private var diagnosticInterrupted = false
     private var speechGeneration = 0L
     private var speechTimeout: Runnable? = null
     private var tts: TextToSpeech? = null
@@ -103,6 +105,10 @@ class MainActivity : Activity() {
     private fun startListening() {
         if (!activityResumed || isFinishing || isDestroyed) return
         if (speechInput.isListening) return
+        if (diagnosticInProgress) {
+            voiceEvent("onJarvisSpeechError", "Завершите проверку микрофона, затем нажмите на круг.")
+            return
+        }
         stopSpeech()
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
             pendingMicStart = true
@@ -142,7 +148,9 @@ class MainActivity : Activity() {
 
     private fun runMicrophoneDiagnostic() {
         if (!activityResumed || isFinishing || isDestroyed) return
+        if (diagnosticInProgress) return
         pendingMicDiagnostics = false
+        diagnosticInProgress = true
         speechInput.cancel()
         stopSpeech()
         val serviceAvailable = android.speech.SpeechRecognizer.isRecognitionAvailable(this)
@@ -161,6 +169,7 @@ class MainActivity : Activity() {
             }
             runOnUiThread {
                 if (!isFinishing && !isDestroyed && activityResumed && generation == diagnosticGeneration) {
+                    diagnosticInProgress = false
                     voiceEvent("onJarvisMicDiagnostic", result.status, result.message + " " + serviceStatus)
                 }
             }
@@ -214,6 +223,10 @@ class MainActivity : Activity() {
         super.onResume()
         activityResumed = true
         speechInput.resume()
+        if (diagnosticInterrupted) {
+            diagnosticInterrupted = false
+            voiceEvent("onJarvisMicDiagnostic", "cancelled", "Проверка прервана при сворачивании приложения.")
+        }
         if (pendingMicDiagnostics && !microphonePermissionPending) requestMicrophoneDiagnostic()
         else if (pendingMicStart && !microphonePermissionPending) startListening()
     }
@@ -221,6 +234,8 @@ class MainActivity : Activity() {
     override fun onPause() {
         activityResumed = false
         diagnosticGeneration++
+        diagnosticInterrupted = diagnosticInProgress
+        diagnosticInProgress = false
         speechInput.pause()
         stopSpeech()
         if (!microphonePermissionPending) pendingMicStart = false
