@@ -54,7 +54,7 @@ class JarvisReminders(private val context: Context) {
         }
         if (!found) return "Напоминание с таким номером не найдено."
         prefs.edit().putString("items", kept.toString()).apply()
-        alarms.cancel(pending(id, "", PendingIntent.FLAG_NO_CREATE))
+        pending(id, "", PendingIntent.FLAG_NO_CREATE)?.let { alarms.cancel(it); it.cancel() }
         return "Напоминание #$id отменено."
     }
 
