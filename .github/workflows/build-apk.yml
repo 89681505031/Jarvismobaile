@@ -10,6 +10,12 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify memory gateway
+        working-directory: memory-gateway
+        run: npm ci && npm test
       - name: Unpack Android project
         run: unzip -q mobile_fixed.zip
       - name: Normalize Kotlin line endings
@@ -21,6 +27,8 @@ jobs:
         run: patch -p1 < patches/microphone-sensitivity.patch
       - name: Apply GigaChat and wake-service fix
         run: python3 scripts/apply_runtime_fixes.py
+      - name: Add optional Redis Agent Memory
+        run: python3 scripts/apply_redis_memory.py
       - uses: actions/setup-java@v5
         with:
           distribution: temurin

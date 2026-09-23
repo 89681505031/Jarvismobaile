@@ -27,3 +27,6 @@ bin/
 
 ### Mac OS ###
 .DS_Store
+# Local build artifacts
+node_modules/
+__pycache__/
