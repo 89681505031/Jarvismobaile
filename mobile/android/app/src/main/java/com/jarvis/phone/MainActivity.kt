@@ -57,6 +57,10 @@ class MainActivity : Activity() {
     private lateinit var home: JarvisHomeAssistant
     private lateinit var vision: JarvisVision
     private lateinit var updates: JarvisSignedUpdates
+    private lateinit var localInfo: JarvisLocalInfo
+    private var pendingWeatherLocation = false
+    private var pendingLocalNewsLocation = false
+    private var pendingLocationOnly = false
     private var wakeSessionActive = false
     private var wakeFailures = 0
     private var wakeRestart: Runnable? = null
@@ -89,6 +93,7 @@ class MainActivity : Activity() {
         reminders = JarvisReminders(this)
         home = JarvisHomeAssistant(this)
         vision = JarvisVision(this)
+        localInfo = JarvisLocalInfo(this)
         updates = JarvisSignedUpdates(this) { status ->
             runOnUiThread {
                 voiceEvent("onJarvisFeatureStatus", "updates", status)
@@ -498,6 +503,31 @@ class MainActivity : Activity() {
 
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == 7421) {
+            val granted = ContextCompat.checkSelfPermission(
+                this, Manifest.permission.ACCESS_COARSE_LOCATION
+            ) == PackageManager.PERMISSION_GRANTED
+            val weather = pendingWeatherLocation
+            val localNews = pendingLocalNewsLocation
+            val justPermission = pendingLocationOnly
+            pendingWeatherLocation = false
+            pendingLocalNewsLocation = false
+            pendingLocationOnly = false
+            if (granted) {
+                voiceEvent("onJarvisLocationStatus", "granted",
+                    "Примерное местоположение разрешено только для погоды и местных новостей.")
+                when {
+                    weather -> fetchWeatherAndSpeak()
+                    localNews -> fetchLocalNewsAndSpeak()
+                    justPermission -> showVoiceStatus("Примерное местоположение разрешено.")
+                }
+            } else {
+                val message = "Местоположение не разрешено. Погода и местные новости по району останутся выключены."
+                voiceEvent("onJarvisLocationStatus", "denied", message)
+                if (weather || localNews) speak(message, resumeAfterSpeech = true)
+            }
+            return
+        }
         if (requestCode == 7413) {
             val wanted = pendingCameraPermission
             pendingCameraPermission = false
@@ -817,6 +847,84 @@ class MainActivity : Activity() {
         }
     }
 
+    private fun hasApproximateLocation(): Boolean =
+        ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) ==
+            PackageManager.PERMISSION_GRANTED
+
+    private fun requestApproximateLocation(forWeather: Boolean = false, forLocalNews: Boolean = false) {
+        if (hasApproximateLocation()) {
+            when {
+                forWeather -> fetchWeatherAndSpeak()
+                forLocalNews -> fetchLocalNewsAndSpeak()
+                else -> voiceEvent("onJarvisLocationStatus", "granted",
+                    "Примерное местоположение уже разрешено.")
+            }
+            return
+        }
+        pendingWeatherLocation = forWeather
+        pendingLocalNewsLocation = forLocalNews
+        pendingLocationOnly = !forWeather && !forLocalNews
+        runOnUiThread {
+            if (isFinishing || isDestroyed) return@runOnUiThread
+            voiceEvent("onJarvisLocationStatus", "request",
+                "Android попросит примерное местоположение. Точная геопозиция не нужна.")
+            ActivityCompat.requestPermissions(
+                this,
+                arrayOf(Manifest.permission.ACCESS_COARSE_LOCATION),
+                7421
+            )
+        }
+    }
+
+    private fun fetchWeatherAndSpeak() {
+        if (!hasApproximateLocation()) {
+            requestApproximateLocation(forWeather = true)
+            return
+        }
+        showVoiceStatus("Определяю примерный район и получаю погоду…")
+        localInfo.requestWeather { weather ->
+            runOnUiThread {
+                if (isFinishing || isDestroyed) return@runOnUiThread
+                voiceEvent("onJarvisLocalInfo", "weather", weather)
+                voiceEvent("onGigaChatResult", weather)
+                speak(weather, resumeAfterSpeech = true)
+            }
+        }
+    }
+
+    private fun fetchLocalNewsAndSpeak() {
+        if (!hasApproximateLocation()) {
+            requestApproximateLocation(forLocalNews = true)
+            return
+        }
+        showVoiceStatus("Ищу свежие новости рядом с текущим районом…")
+        localInfo.requestLocalNewsHeadlines { result ->
+            val value = result.fold(
+                onSuccess = { (place, headlines) ->
+                    if (headlines.isEmpty()) {
+                        "Не нашёл свежих местных заголовков для ${place.label}."
+                    } else {
+                        val prompt = "Сделай короткую нейтральную голосовую сводку местных новостей для " +
+                            place.label + ". Используй только заголовки ниже, не придумывай детали. " +
+                            "Назови 4–6 важных тем. Заголовки: " + headlines.joinToString(" | ")
+                        val response = gigaChat.askConversation(prompt, selectedPersona)
+                        if (response.success) response.text
+                        else "Свежие местные заголовки для ${place.label}: " +
+                            headlines.take(5).joinToString(". ")
+                    }
+                },
+                onFailure = {
+                    "Не удалось получить местные новости. Проверьте интернет, геолокацию и повторите."
+                }
+            )
+            runOnUiThread {
+                if (isFinishing || isDestroyed) return@runOnUiThread
+                voiceEvent("onJarvisLocalInfo", "local_news", value)
+                voiceEvent("onGigaChatResult", value)
+                speak(value, resumeAfterSpeech = true)
+            }
+        }
+    }
     private fun analyzeLatestWhatsApp() {
         mainHandler.postDelayed({
             backgroundExecutor.execute {
@@ -1105,6 +1213,30 @@ class MainActivity : Activity() {
             }
 
             if (
+                normalized == "погода" ||
+                normalized == "погода сейчас" ||
+                normalized == "погода сегодня" ||
+                normalized.contains("какая погода") ||
+                normalized.contains("что с погодой")
+            ) {
+                if (hasApproximateLocation()) fetchWeatherAndSpeak()
+                else requestApproximateLocation(forWeather = true)
+                return "Получаю погоду по примерному местоположению…"
+            }
+
+            if (
+                normalized == "местные новости" ||
+                normalized == "новости рядом" ||
+                normalized.contains("новости по месту") ||
+                normalized.contains("новости в моем городе") ||
+                normalized.contains("новости в моём городе")
+            ) {
+                if (hasApproximateLocation()) fetchLocalNewsAndSpeak()
+                else requestApproximateLocation(forLocalNews = true)
+                return "Получаю местную новостную сводку…"
+            }
+
+            if (
                 normalized == "новости" ||
                 normalized.contains("сводка новостей") ||
                 normalized.contains("последние новости") ||
@@ -1141,6 +1273,19 @@ class MainActivity : Activity() {
         }
 
         @JavascriptInterface fun startListening() { runOnUiThread { this@MainActivity.startListening() } }
+        @JavascriptInterface fun hasApproximateLocation(): Boolean = this@MainActivity.hasApproximateLocation()
+        @JavascriptInterface fun requestApproximateLocation() {
+            this@MainActivity.requestApproximateLocation()
+        }
+        @JavascriptInterface fun requestWeather() {
+            if (this@MainActivity.hasApproximateLocation()) this@MainActivity.fetchWeatherAndSpeak()
+            else this@MainActivity.requestApproximateLocation(forWeather = true)
+        }
+        @JavascriptInterface fun requestLocalNews() {
+            if (this@MainActivity.hasApproximateLocation()) this@MainActivity.fetchLocalNewsAndSpeak()
+            else this@MainActivity.requestApproximateLocation(forLocalNews = true)
+        }
+        @JavascriptInterface fun requestNewsSummary() { this@MainActivity.fetchNewsAndSpeak() }
         @JavascriptInterface fun getInterruptByVoice(): Boolean = prefs.getBoolean("interrupt_voice", false)
         @JavascriptInterface fun setInterruptByVoice(enabled: Boolean) {
             prefs.edit().putBoolean("interrupt_voice", enabled).apply()
@@ -1407,6 +1552,7 @@ class MainActivity : Activity() {
         tts?.stop()
         tts?.shutdown()
         fishAudioTts.release()
+        localInfo.release()
         if (::webView.isInitialized) {
             webView.removeJavascriptInterface("AndroidJarvis")
             webView.destroy()
