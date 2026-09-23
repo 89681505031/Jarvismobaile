@@ -37,3 +37,18 @@ $('diagnoseMic').onclick=()=>{
 };
 
 $('skipRegistration').onclick=()=>{localStorage.setItem('jarvisOnboarded','1');$('registration').hidden=true;showMessage('Нажмите на круг, чтобы проверить голосовой ввод.');};
+
+$('instagramGatewayUrl').value=window.AndroidJarvis?.getInstagramGatewayUrl?.()||'';
+$('saveInstagramGateway').onclick=()=>{
+  const value=$('instagramGatewayUrl').value.trim();
+  $('instagramStatus').textContent=window.AndroidJarvis?.setInstagramGatewayUrl?.(value)||
+    'Сохранение доступно в обновлённом APK.';
+};
+$('openInstagramAdmin').onclick=()=>{
+  $('instagramStatus').textContent=window.AndroidJarvis?.openInstagramDashboard?.()||
+    'Панель доступна только в обновлённом APK.';
+};
+$('openInstagramApp').onclick=()=>{
+  showMessage(window.AndroidJarvis?.command?.('открой инстаграм')||
+    'Открытие Instagram доступно в обновлённом APK.');
+};
