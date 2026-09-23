@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import org.json.JSONObject
 import org.vosk.Model
 import org.vosk.Recognizer
@@ -29,7 +30,10 @@ class OfflineWakeEngine(
     private val onStatus: (String, String) -> Unit,
     private val onMatch: (WakeWordMatcher.Activation) -> Unit,
     private val stayOpenOnMatch: Boolean = false,
-    private val onUtterance: ((String) -> Unit)? = null
+    private val onUtterance: ((String) -> Unit)? = null,
+    // Indicates recognizer partial-speech activity, NOT measured PCM volume.
+    // Foreground HUD may use it for an approximate listening animation.
+    private val onVoiceActivity: ((Float) -> Unit)? = null
 ) {
     companion object {
         private const val URL_MODEL =
@@ -53,6 +57,7 @@ class OfflineWakeEngine(
     private var disposed = false
     private var requested = false
     private var generation = 0
+    private var lastPartialAt = 0L
 
     fun installed(): Boolean = modelLooksValid(location)
     fun downloading(): Boolean = downloading
@@ -184,7 +189,23 @@ class OfflineWakeEngine(
                     recognizer = rec
                     service = svc
                     val listener = object : RecognitionListener {
-                        override fun onPartialResult(hypothesis: String) = Unit
+                        override fun onPartialResult(hypothesis: String) {
+                            if (onVoiceActivity == null || generation != ticket || !requested) return
+                            val partial = try {
+                                JSONObject(hypothesis).optString("partial").trim()
+                            } catch (_: Exception) { "" }
+                            if (partial.isBlank()) return
+                            val now = SystemClock.elapsedRealtime()
+                            // Bound WebView messages, no microphone buffer storage.
+                            if (now - lastPartialAt < 120L) return
+                            lastPartialAt = now
+                            val strength = (0.24f + partial.length * 0.024f)
+                                .coerceIn(0.3f, 0.82f)
+                            ui.post {
+                                if (!disposed && requested && generation == ticket)
+                                    onVoiceActivity?.invoke(strength)
+                            }
+                        }
                         override fun onResult(hypothesis: String) { accept(hypothesis, "text", ticket) }
                         override fun onFinalResult(hypothesis: String) { accept(hypothesis, "text", ticket) }
                         override fun onError(exception: Exception) {

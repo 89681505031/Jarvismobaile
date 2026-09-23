@@ -38,7 +38,13 @@ class FishAudioTts(private val context: Context) {
     @Volatile private var connection: HttpURLConnection? = null
     @Volatile private var closed = false
 
-    fun speak(text: String, persona: String, onError: ((String) -> Unit)? = null, onComplete: (() -> Unit)? = null) {
+    fun speak(
+        text: String,
+        persona: String,
+        onError: ((String) -> Unit)? = null,
+        onComplete: (() -> Unit)? = null,
+        onStart: (() -> Unit)? = null
+    ) {
         if (closed) return
         stop()
         val token = generation.get()
@@ -87,7 +93,17 @@ class FishAudioTts(private val context: Context) {
                             if (token == generation.get()) { releasePlayer(); onError?.invoke("Ошибка воспроизведения Fish Audio") }
                             true
                         }
-                        next.setOnPreparedListener { if (token == generation.get()) it.start() }
+                        next.setOnPreparedListener {
+                            if (token == generation.get() && !closed) {
+                                try {
+                                    it.start()
+                                    onStart?.invoke()
+                                } catch (_: Exception) {
+                                    releasePlayer()
+                                    onError?.invoke("Не удалось начать воспроизведение Fish Audio")
+                                }
+                            }
+                        }
                         next.prepareAsync()
                     } catch (_: Exception) {
                         releasePlayer()

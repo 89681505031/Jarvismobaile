@@ -46,8 +46,11 @@ class JarvisSignedUpdates(private val context: Context, private val report: (Str
                 val release = JSONObject(conn.inputStream.bufferedReader().use { it.readText().take(512_000) })
                 if (release.optBoolean("draft") || release.optBoolean("prerelease")) return@execute
                 val assets = release.optJSONArray("assets") ?: return@execute
-                val wanted = if (context.packageName.endsWith(".plus"))
-                    "Jarvis-Mobile-PLUS-signed.apk" else "Jarvis-Mobile-signed.apk"
+                val wanted = if (context.packageName.endsWith(".hud3"))
+                    "Jarvis-Mobile-HUD3-signed.apk"
+                else if (context.packageName.endsWith(".plus"))
+                    "Jarvis-Mobile-PLUS-signed.apk"
+                else "Jarvis-Mobile-signed.apk"
                 var hasApk = false
                 for (i in 0 until assets.length()) {
                     if (assets.optJSONObject(i)?.optString("name") == wanted) {
@@ -91,8 +94,11 @@ class JarvisSignedUpdates(private val context: Context, private val report: (Str
                 val release = JSONObject(data)
                 val assets = release.optJSONArray("assets") ?: error("В релизе отсутствуют APK.")
                 var assetUrl: String? = null
-                val expectedName = if (context.packageName.endsWith(".plus"))
-                    "Jarvis-Mobile-PLUS-signed.apk" else "Jarvis-Mobile-signed.apk"
+                val expectedName = if (context.packageName.endsWith(".hud3"))
+                    "Jarvis-Mobile-HUD3-signed.apk"
+                else if (context.packageName.endsWith(".plus"))
+                    "Jarvis-Mobile-PLUS-signed.apk"
+                else "Jarvis-Mobile-signed.apk"
                 for (i in 0 until assets.length()) {
                     val asset = assets.optJSONObject(i) ?: continue
                     if (asset.optString("name") == expectedName) {
