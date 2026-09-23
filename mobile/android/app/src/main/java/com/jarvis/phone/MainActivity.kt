@@ -930,6 +930,18 @@ class MainActivity : Activity() {
                 if (parsed != null) return reminders.schedule(parsed.second, parsed.first)
             }
             if (skills.enabled("offline")) OfflineKnowledge.answer(memoryText)?.let { return it }
+            if (skills.enabled("home") && normalized in setOf(
+                    "включи умный свет", "выключи умный свет", "включи домашний свет", "выключи домашний свет")) {
+                val on = normalized.startsWith("включи")
+                backgroundExecutor.execute {
+                    val response = home.setLight(on)
+                    runOnUiThread {
+                        voiceEvent("onJarvisFeatureStatus", "home", response)
+                        if (activityResumed) speak(response, resumeAfterSpeech = true)
+                    }
+                }
+                return "Отправляю команду выбранному светильнику…"
+            }
             if (
                 normalized.contains("кто мне написал") ||
                 normalized.contains("прочитай сообщения") ||
