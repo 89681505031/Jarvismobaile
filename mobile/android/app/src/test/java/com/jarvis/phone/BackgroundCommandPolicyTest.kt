@@ -9,10 +9,12 @@ class BackgroundCommandPolicyTest {
         assertTrue(BackgroundCommandPolicy.permitted("Включи фонарик"))
         assertTrue(BackgroundCommandPolicy.permitted("Следующий трек"))
         assertTrue(BackgroundCommandPolicy.permitted("пауза"))
+        assertTrue(BackgroundCommandPolicy.permitted("Включи музыку!"))
+        assertTrue(BackgroundCommandPolicy.permitted("продолжи музыку"))
     }
     @Test fun actionsRequiringScreenOrConfirmationStayBehindNotification() {
         for (phrase in listOf("позвони папе", "открой браузер", "открой WhatsApp",
-                "прочитай мои сообщения", "найди в интернете погоду", "включи музыку")) {
+                "прочитай мои сообщения", "найди в интернете погоду", "включи песню Metallica")) {
             assertFalse(phrase, BackgroundCommandPolicy.permitted(phrase))
         }
         assertFalse(BackgroundCommandPolicy.permitted("пауза и позвони"))
