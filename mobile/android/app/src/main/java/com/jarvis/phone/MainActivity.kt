@@ -381,7 +381,7 @@ class MainActivity : Activity() {
                     "Свежие новости: " + items.take(5).joinToString(". ")
                 } else answer
                 runOnUiThread {
-            if (isFinishing || isDestroyed) return@runOnUiThread
+                    if (isFinishing || isDestroyed) return@runOnUiThread
                     if (::webView.isInitialized) {
                         webView.evaluateJavascript("window.onGigaChatResult && window.onGigaChatResult(${JSONObject.quote(finalText)})", null)
                     }
@@ -390,7 +390,7 @@ class MainActivity : Activity() {
             } catch (e: Exception) {
                 val message = "Не удалось получить свежие новости: ${e.message ?: "ошибка соединения"}"
                 runOnUiThread {
-            if (isFinishing || isDestroyed) return@runOnUiThread
+                    if (isFinishing || isDestroyed) return@runOnUiThread
                     if (::webView.isInitialized) {
                         webView.evaluateJavascript("window.onGigaChatResult && window.onGigaChatResult(${JSONObject.quote(message)})", null)
                     }
@@ -435,7 +435,7 @@ class MainActivity : Activity() {
                 }
 
                 runOnUiThread {
-            if (isFinishing || isDestroyed) return@runOnUiThread
+                    if (isFinishing || isDestroyed) return@runOnUiThread
                     if (::webView.isInitialized) {
                         webView.evaluateJavascript("window.onGigaChatResult && window.onGigaChatResult(${JSONObject.quote(answer)})", null)
                     }
@@ -461,7 +461,7 @@ class MainActivity : Activity() {
             val answer = gigaChat.ask(text, selectedPersona, context)
             memory.rememberTurn(memoryText, answer)
             runOnUiThread {
-            if (isFinishing || isDestroyed) return@runOnUiThread
+                if (isFinishing || isDestroyed) return@runOnUiThread
                 if (::webView.isInitialized) {
                     val escaped = JSONObject.quote(answer)
                     webView.evaluateJavascript("window.onGigaChatResult && window.onGigaChatResult($escaped)", null)
