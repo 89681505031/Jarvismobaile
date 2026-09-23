@@ -1,0 +1,10 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Jarvis — Instagram</title><link rel="stylesheet" href="/admin.css"></head>
+<body><main><header><h1>J.A.R.V.I.S. · Instagram</h1><p>Пилот: ответы отправляются только после вашего подтверждения.</p></header>
+<form id="access"><label for="token">Ключ администратора шлюза</label><input type="password" id="token" autocomplete="off" required>
+<button type="submit">Открыть сообщения</button></form>
+<section id="panel" hidden><nav><button id="refresh" type="button">Обновить входящие</button><button id="logout" type="button">Закрыть доступ</button></nav>
+<p id="notice" aria-live="polite">Готово.</p><div id="inbox"></div></section>
+<p class="hint">Не вводите пароль Instagram. Используйте только отдельный ключ шлюза. Открывайте страницу по HTTPS.</p>
+</main><script src="/admin.js" defer></script></body></html>
