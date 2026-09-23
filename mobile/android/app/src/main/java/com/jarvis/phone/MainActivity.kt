@@ -429,6 +429,20 @@ class MainActivity : Activity() {
 
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == 7013) {
+            val requested = pendingBackgroundNotification
+            pendingBackgroundNotification = false
+            if (requested && activityResumed) {
+                if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) ==
+                    PackageManager.PERMISSION_GRANTED) setBackgroundWakeEnabled(true)
+                else {
+                    voiceEvent("onJarvisBackgroundWakeChanged", false)
+                    voiceEvent("onJarvisBackgroundWakeStatus", "error",
+                        "Уведомления не разрешены. Фоновый микрофон оставлен выключенным.")
+                }
+            }
+            return
+        }
         if (requestCode != 7011) return
         microphonePermissionPending = false
         val granted = ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
@@ -439,10 +453,15 @@ class MainActivity : Activity() {
                 startListening()
             } else if (pendingWakePermission && activityResumed) {
                 setWakeModeEnabled(true)
+            } else if (pendingBackgroundMic && activityResumed) {
+                pendingBackgroundMic = false
+                setBackgroundWakeEnabled(true)
             }
         } else {
             val diagnosticWasRequested = pendingMicDiagnostics
             val wakeWasRequested = pendingWakePermission
+            val backgroundWasRequested = pendingBackgroundMic
+            pendingBackgroundMic = false
             pendingWakePermission = false
             pendingMicDiagnostics = false
             pendingMicStart = false
@@ -451,6 +470,9 @@ class MainActivity : Activity() {
             else if (wakeWasRequested) {
                 voiceEvent("onJarvisWakeModeChanged", false)
                 voiceEvent("onJarvisWakeStatus", "error", message)
+            } else if (backgroundWasRequested) {
+                voiceEvent("onJarvisBackgroundWakeChanged", false)
+                voiceEvent("onJarvisBackgroundWakeStatus", "error", message)
             } else voiceEvent("onJarvisSpeechError", message)
         }
     }
@@ -458,28 +480,63 @@ class MainActivity : Activity() {
     override fun onResume() {
         super.onResume()
         activityResumed = true
+        wakeModeEnabled = prefs.getBoolean("wake_mode", false)
+        backgroundWakeEnabled = prefs.getBoolean("background_wake", false)
         speechInput.resume()
+        // Stop the service's recorder before reacquiring audio for the visible
+        // screen; this prevents two Vosk sessions competing for the microphone.
+        WakeForegroundService.shouldListenInBackground = false
         if (diagnosticInterrupted) {
             diagnosticInterrupted = false
-            voiceEvent("onJarvisMicDiagnostic", "cancelled", "Проверка прервана при сворачивании приложения.")
+            voiceEvent("onJarvisMicDiagnostic", "cancelled",
+                "Проверка прервана при сворачивании приложения.")
         }
+        voiceEvent("onJarvisWakeModeChanged", wakeModeEnabled)
+        voiceEvent("onJarvisBackgroundWakeChanged", backgroundWakeEnabled)
+        val service = if (backgroundWakeEnabled) WakeForegroundService.active else null
+        if (service != null) service.pauseForForeground { resumeForegroundMicrophone() }
+        else resumeForegroundMicrophone()
+        if (backgroundWakeEnabled && wakeModeEnabled) startBackgroundServiceIfEligible()
+        deliverBackgroundCommand()
+    }
+
+    private fun resumeForegroundMicrophone() {
+        if (!activityResumed || isFinishing || isDestroyed) return
         if (pendingMicDiagnostics && !microphonePermissionPending) requestMicrophoneDiagnostic()
         else if (pendingMicStart && !microphonePermissionPending) startListening()
         else if (pendingWakePermission && !microphonePermissionPending) setWakeModeEnabled(true)
-        else if (wakeModeEnabled) scheduleWakeRestart(900L)
+        else if (pendingBackgroundMic && !microphonePermissionPending) setBackgroundWakeEnabled(true)
+        else if (wakeModeEnabled && !pendingBackgroundNotification) scheduleWakeRestart(500L)
     }
 
     override fun onPause() {
         activityResumed = false
         cancelWakeRestart()
-        wakeSessionActive = false
-        offlineWake.stop()
-        voiceEvent("onJarvisWakeStatus", "paused", "Ожидание имени приостановлено: приложение свёрнуто.")
         diagnosticGeneration++
-        diagnosticInterrupted = diagnosticInProgress
+        val diagnosticRunning = diagnosticInProgress
+        diagnosticInterrupted = diagnosticRunning
         diagnosticInProgress = false
         speechInput.pause()
         stopSpeech()
+        val handoff = backgroundWakeEnabled && wakeModeEnabled && !systemSpeechOpen &&
+            !diagnosticRunning && !isFinishing && !isDestroyed
+        wakeSessionActive = false
+        offlineWake.stop {
+            // This callback fires AFTER the old AudioRecord was released.
+            // startForegroundService was already called while Activity was visible.
+            if (handoff && !activityResumed &&
+                prefs.getBoolean("background_wake", false) &&
+                prefs.getBoolean("wake_mode", false)) {
+                WakeForegroundService.shouldListenInBackground = true
+                WakeForegroundService.active?.startBackgroundListening()
+            }
+        }
+        if (!handoff) WakeForegroundService.shouldListenInBackground = false
+        voiceEvent(
+            "onJarvisWakeStatus", "paused",
+            if (handoff) "Переключаю тихое ожидание в фоновый режим…"
+            else "Ожидание приостановлено."
+        )
         if (!microphonePermissionPending) pendingMicStart = false
         super.onPause()
     }
@@ -883,6 +940,10 @@ class MainActivity : Activity() {
 
         @JavascriptInterface fun startListening() { runOnUiThread { this@MainActivity.startListening() } }
         @JavascriptInterface fun getWakeModeEnabled(): Boolean = prefs.getBoolean("wake_mode", false)
+        @JavascriptInterface fun getBackgroundWakeEnabled(): Boolean = prefs.getBoolean("background_wake", false)
+        @JavascriptInterface fun setBackgroundWakeEnabled(enabled: Boolean) {
+            runOnUiThread { this@MainActivity.setBackgroundWakeEnabled(enabled) }
+        }
         @JavascriptInterface fun wakeModelInstalled(): Boolean = offlineWake.installed()
         @JavascriptInterface fun installWakeModel() {
             runOnUiThread { offlineWake.install() }
