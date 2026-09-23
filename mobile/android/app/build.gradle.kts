@@ -13,6 +13,18 @@ android {
         targetSdk = 35
         versionCode = System.getenv("JARVIS_VERSION_CODE")?.toIntOrNull() ?: 200
         versionName = System.getenv("JARVIS_VERSION_NAME") ?: "0.3.0"
+        manifestPlaceholders["jarvisLabel"] = "J.A.R.V.I.S."
+    }
+
+    // Optional isolated package for real-device microphone tests; never replaces
+    // the installed Jarvis, so the existing app and its data remain untouched.
+    buildTypes {
+        getByName("debug") {
+            if (System.getenv("JARVIS_DIAGNOSTIC") == "1") {
+                applicationIdSuffix = ".diagnostic"
+                manifestPlaceholders["jarvisLabel"] = "J.A.R.V.I.S. TEST"
+            }
+        }
     }
 
     buildFeatures {
