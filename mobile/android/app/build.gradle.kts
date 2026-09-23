@@ -21,8 +21,8 @@ android {
     buildTypes {
         getByName("debug") {
             if (System.getenv("JARVIS_DIAGNOSTIC") == "1") {
-                applicationIdSuffix = ".diagnostic"
-                manifestPlaceholders["jarvisLabel"] = "J.A.R.V.I.S. TEST"
+                applicationIdSuffix = ".wake"
+                manifestPlaceholders["jarvisLabel"] = "J.A.R.V.I.S. WAKE"
             }
         }
     }
