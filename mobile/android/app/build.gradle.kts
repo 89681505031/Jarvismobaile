@@ -14,6 +14,11 @@ android {
         versionCode = System.getenv("JARVIS_VERSION_CODE")?.toIntOrNull() ?: 200
         versionName = System.getenv("JARVIS_VERSION_NAME") ?: "0.3.0"
         manifestPlaceholders["jarvisLabel"] = "J.A.R.V.I.S."
+        // Only the isolated PLUS tester can be ARM64-only. Keep standard
+        // debug/release outputs universal for device and emulator coverage.
+        if (System.getenv("JARVIS_ARM64_ONLY") == "1") {
+            ndk { abiFilters.add("arm64-v8a") }
+        }
     }
 
     // Optional isolated package for real-device microphone tests; never replaces
