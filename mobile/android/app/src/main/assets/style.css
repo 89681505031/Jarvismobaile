@@ -34,3 +34,6 @@ button,input{font:inherit}button{cursor:pointer}
 #registration h1{margin:0 0 10px;text-align:center;color:#9fe4ff;letter-spacing:2px;font-size:25px}#registration p{text-align:center;color:#8da7b8;margin:0 0 24px;line-height:1.5}
 #registration input{display:block;width:100%;margin:10px 0;padding:15px;border-radius:13px;border:1px solid #29495b;background:#05080c;color:#fff;min-height:52px}
 #saveProfile{width:100%;margin-top:14px;padding:16px;border:1px solid #6bc9ef;border-radius:14px;background:#12384c;color:#c9f2ff;font-weight:700;min-height:54px}
+
+select{background:#05080c;border:1px solid #243746;color:#e8f1ff;border-radius:12px;min-height:52px;padding:12px;font:inherit}
+.app-empty{white-space:pre-wrap;overflow-wrap:anywhere}
