@@ -121,7 +121,7 @@ class JarvisSignedUpdates(private val context: Context, private val report: (Str
                         report("APK проверен. Android попросит подтвердить установку.")
                         val intent = Intent(Intent.ACTION_VIEW).apply {
                             setDataAndType(content, "application/vnd.android.package-archive")
-                            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_GRANT_READ_URI_PERMISSION
+                            this.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_GRANT_READ_URI_PERMISSION
                         }
                         try { context.startActivity(intent) }
                         catch (_: Exception) { report("Разрешите установку обновлений для JARVIS в Android.") }
