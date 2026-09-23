@@ -89,12 +89,12 @@ class JarvisSignedUpdates(private val context: Context, private val report: (Str
                     } finally { connection.disconnect() }
                     val pm = context.packageManager
                     @Suppress("DEPRECATION")
-                    val flags = if (android.os.Build.VERSION.SDK_INT >= 28)
+                    val signingFlags = if (android.os.Build.VERSION.SDK_INT >= 28)
                         PackageManager.GET_SIGNING_CERTIFICATES else PackageManager.GET_SIGNATURES
                     @Suppress("DEPRECATION")
-                    val installed = pm.getPackageInfo(context.packageName, flags)
+                    val installed = pm.getPackageInfo(context.packageName, signingFlags)
                     @Suppress("DEPRECATION")
-                    val candidate = pm.getPackageArchiveInfo(file.path, flags)
+                    val candidate = pm.getPackageArchiveInfo(file.path, signingFlags)
                         ?: error("APK повреждён")
                     if (candidate.packageName != context.packageName) error("Другая версия приложения")
                     @Suppress("DEPRECATION")
