@@ -105,6 +105,14 @@
     level = Math.max(.03, Math.min(1, level));
     orb.style.setProperty('--local-energy', level.toFixed(3));
     orb.style.setProperty('--local-bloom', Math.min(1, .25 + level * .7).toFixed(3));
+    // Computed CSS variables work on older Android WebViews that do not
+    // support arithmetic multiplication inside calc().
+    orb.style.setProperty('--hud-core-scale', (1 + level * .12).toFixed(3));
+    orb.style.setProperty('--hud-glow', Math.round(18 + level * 48) + 'px');
+    orb.style.setProperty('--hud-listen-glow', Math.round(23 + level * 56) + 'px');
+    orb.style.setProperty('--hud-speak-glow', Math.round(25 + level * 74) + 'px');
+    orb.style.setProperty('--hud-core-alpha', Math.min(1, .25 + level * .7).toFixed(3));
+    orb.style.setProperty('--hud-wave-alpha', Math.min(1, .56 + level * .44).toFixed(3));
     drawWave();
     raf = window.requestAnimationFrame(animate);
   }
