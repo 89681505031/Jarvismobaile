@@ -83,7 +83,10 @@ class MainActivity : Activity() {
         reminders = JarvisReminders(this)
         home = JarvisHomeAssistant(this)
         vision = JarvisVision(this)
-        updates = JarvisSignedUpdates(this) { showVoiceStatus(it) }
+        updates = JarvisSignedUpdates(this) {
+            voiceEvent("onJarvisFeatureStatus", "updates", it)
+            showVoiceStatus(it)
+        }
         interruptByVoice = prefs.getBoolean("interrupt_voice", false)
         selectedPersona = prefs.getString("persona", "J.A.R.V.I.S.") ?: "J.A.R.V.I.S."
         wakeModeEnabled = prefs.getBoolean("wake_mode", false)
@@ -454,7 +457,8 @@ class MainActivity : Activity() {
         if (requestCode == 7411 || requestCode == 7412) {
             if (resultCode == RESULT_OK) {
                 if (requestCode == 7411) {
-                    val bitmap = @Suppress("DEPRECATION") (data?.extras?.get("data") as? Bitmap)
+                    @Suppress("DEPRECATION")
+                    val bitmap = data?.extras?.get("data") as? Bitmap
                     if (bitmap == null) showVoiceStatus("Камера не вернула фото.")
                     else vision.fromCameraThumbnail(bitmap) { showVoiceStatus(it) }
                 } else {
