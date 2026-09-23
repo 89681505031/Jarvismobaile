@@ -846,8 +846,9 @@ class MainActivity : Activity() {
                 } else {
                     val prompt = "Проанализируй последнее сообщение WhatsApp по данным ниже. Ответь по-русски коротко и естественно для голосового ассистента. Обязательно назови имя отправителя или название группы, если оно видно. Затем объясни простыми словами, о чём сообщение, что человек или группа сообщает, просит или хочет. Не выдумывай отсутствующие сведения и скажи, если данных недостаточно. Данные WhatsApp:\n" + source
                     if (!prefs.getBoolean("gigachat_share_messages", false)) {
-                        "Последнее сообщение: ${notification?.title.orEmpty()}. ${notification?.text.orEmpty()}".trim() +
-                            " Анализ GigaChat выключен для приватных сообщений. Если нужен анализ, разрешите его отдельно в настройках."
+                        "Последнее сообщение без облачного анализа:\n" +
+                            source.take(800) +
+                            "\nЧтобы отправить текст для анализа GigaChat, включите отдельное разрешение в настройках."
                     } else gigaChat.askConversation(prompt, selectedPersona).text
                 }
 
@@ -1280,16 +1281,25 @@ class MainActivity : Activity() {
         fun testGigaChatBrain() {
             if (!brainTestRunning.compareAndSet(false, true)) return
             runOnUiThread { voiceEvent("onJarvisBrainState", "testing", "Проверяю GigaChat…") }
+            val originalKey = prefs.getString("gigachat_api_key", "").orEmpty()
+            val originalScope = gigaChat.scopeName()
+            val originalModel = gigaChat.modelName()
             backgroundExecutor.execute {
                 try {
                     val result = gigaChat.testConnection()
-                    if (result.success) {
+                    val unchanged = originalKey.isNotBlank() &&
+                        prefs.getString("gigachat_api_key", "").orEmpty() == originalKey &&
+                        gigaChat.scopeName() == originalScope &&
+                        gigaChat.modelName() == originalModel
+                    if (result.success && unchanged) {
                         prefs.edit().putLong("gigachat_verified_at", System.currentTimeMillis()).apply()
                     } else prefs.edit().remove("gigachat_verified_at").apply()
                     runOnUiThread {
                         voiceEvent("onJarvisBrainState",
-                            if (result.success) "connected" else "error",
-                            if (result.success) "GigaChat подключён. Теперь он отвечает на вопросы JARVIS."
+                            if (result.success && unchanged) "connected" else "error",
+                            if (result.success && unchanged)
+                                "GigaChat подключён. Теперь он отвечает на вопросы JARVIS."
+                            else if (!unchanged) "Настройки GigaChat изменились во время проверки. Проверьте ещё раз."
                             else result.text)
                     }
                 } finally {
