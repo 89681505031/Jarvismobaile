@@ -12,6 +12,8 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
@@ -39,10 +41,17 @@ jobs:
           else
             echo "::warning::JARVIS_DEBUG_KEYSTORE_B64 is not configured; APK signature may change between runners."
           fi
-      - name: Set APK version
+      - name: Set APK version from source history
+        env:
+          SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |
-          echo "JARVIS_VERSION_CODE=$((1000 + GITHUB_RUN_NUMBER))" >> "$GITHUB_ENV"
-          echo "JARVIS_VERSION_NAME=0.3.${GITHUB_RUN_NUMBER}" >> "$GITHUB_ENV"
+          # Manual and PR workflows have independent run numbers. Derive the
+          # package version from the *source* commit, not the workflow run.
+          COUNT=$(git rev-list --count "$SOURCE_SHA")
+          test "$COUNT" -gt 0
+          echo "JARVIS_VERSION_CODE=$((100000 + COUNT))" >> "$GITHUB_ENV"
+          echo "JARVIS_VERSION_NAME=0.4.$COUNT" >> "$GITHUB_ENV"
+          echo "Source commit: $SOURCE_SHA | Android versionCode: $((100000 + COUNT))" >> "$GITHUB_STEP_SUMMARY"
       - name: Build debug APK
         working-directory: mobile/android
         run: gradle --no-daemon testDebugUnitTest lintDebug assembleDebug
