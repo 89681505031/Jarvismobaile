@@ -93,7 +93,7 @@ class JarvisReminders(private val context: Context) {
 
     companion object {
         private val regex = Regex(
-            "^напомни(?: мне)? через (\\d{1,5}) (минуту|минуты|минут|мин|час|часа|часов|день|дня|дней)\\s*(.*)$",
+            "^напомни(?: мне)? через (\\d{1,5}) (минуту|минуты|минут|мин|часов|часа|час|дней|дня|день)(?:\\s+|$)(.*)$",
             RegexOption.IGNORE_CASE
         )
 
