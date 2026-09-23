@@ -83,9 +83,11 @@ class MainActivity : Activity() {
         reminders = JarvisReminders(this)
         home = JarvisHomeAssistant(this)
         vision = JarvisVision(this)
-        updates = JarvisSignedUpdates(this) {
-            voiceEvent("onJarvisFeatureStatus", "updates", it)
-            showVoiceStatus(it)
+        updates = JarvisSignedUpdates(this) { status ->
+            runOnUiThread {
+                voiceEvent("onJarvisFeatureStatus", "updates", status)
+                showVoiceStatus(status)
+            }
         }
         interruptByVoice = prefs.getBoolean("interrupt_voice", false)
         selectedPersona = prefs.getString("persona", "J.A.R.V.I.S.") ?: "J.A.R.V.I.S."
