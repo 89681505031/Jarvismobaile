@@ -5,7 +5,7 @@ const MAX_BODY = 64 * 1024;
 const MAX_INBOX = 200;
 const TTL_MS = 23 * 60 * 60 * 1000;
 const safeText = value => typeof value === 'string' && value.trim().length > 0 && value.length <= 1000;
-const safeId = value => typeof value === 'string' && /^[a-zA-Z0-9_:-]{1,255}$/.test(value);
+const safeId = value => typeof value === 'string' && /^[a-zA-Z0-9_.:$-]{1,255}$/.test(value);
 const equal = (a, b) => {
   if (typeof a !== 'string' || typeof b !== 'string') return false;
   const x = Buffer.from(a), y = Buffer.from(b);
