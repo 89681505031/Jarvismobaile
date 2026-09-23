@@ -153,7 +153,7 @@ class MainActivity : Activity() {
     }
 
     private fun cancelWakeRestart() {
-        wakeRestart?.let(mainHandler::removeCallbacks)
+        wakeRestart?.let { mainHandler.removeCallbacks(it) }
         wakeRestart = null
     }
 
@@ -793,7 +793,12 @@ class MainActivity : Activity() {
             runOnUiThread { this@MainActivity.startConversationListening(seconds.coerceIn(1, 30) * 1000L) }
         }
         @JavascriptInterface fun speak(text: String) { runOnUiThread { this@MainActivity.speak(text.take(8000), resumeAfterSpeech = true) } }
-        @JavascriptInterface fun stopListening() { runOnUiThread { speechInput.cancel() } }
+        @JavascriptInterface fun stopListening() { runOnUiThread {
+            // Text commands must stop ambient listening as well, not just the recognizer.
+            wakeSessionActive = false
+            cancelWakeRestart()
+            speechInput.cancel()
+        } }
         @JavascriptInterface fun openMicrophoneSettings() { runOnUiThread {
             if (isFinishing || isDestroyed) return@runOnUiThread
             startActivity(Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
