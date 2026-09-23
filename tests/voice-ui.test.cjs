@@ -12,7 +12,7 @@ function load() {
     querySelector(tag) { return this.children.find(child => child.tag === tag); }
   }
   const elements = new Map();
-  const calls = { command: [], speak: [], start: 0, windows: 0, diagnostics: 0, wakeSettings: [] };
+  const calls = { command: [], speak: [], start: 0, windows: 0, diagnostics: 0, wakeSettings: [], backgroundSettings: [] };
   const context = { document: { getElementById(id) {
     if (!elements.has(id)) elements.set(id, new Element()); return elements.get(id);
   }, createElement(tag) { const e = new Element(); e.tag = tag; return e; }, querySelectorAll() { return []; } },
@@ -20,6 +20,8 @@ function load() {
     command(text) { calls.command.push(text); return 'Ответ'; }, speak(text) { calls.speak.push(text); },
     startListening() { calls.start++; }, stopListening() {}, startConversationWindow() { calls.windows++; },
     diagnoseMicrophone() { calls.diagnostics++; },
+    getBackgroundWakeEnabled() { return false; },
+    setBackgroundWakeEnabled(enabled) { calls.backgroundSettings.push(enabled); },
     getWakeModeEnabled() { return false; },
     setWakeModeEnabled(enabled) { calls.wakeSettings.push(enabled); },
     setPersona() {}, listApps() { return JSON.stringify([{ label: '<img src=x onerror=alert(1)>', packageName: 'app', allowed: false }]); }
@@ -123,4 +125,26 @@ test('wake standby is not treated as unrestricted dictation', () => {
   assert.equal(elements.get('micStatus').textContent, 'Жду имя');
   assert.equal(elements.get('orbButton').attrs['aria-busy'], 'false');
   assert.deepEqual(calls.command, []);
+});
+
+test('background microphone is opt-in and native owns enable/disable', () => {
+  const { calls, elements } = load();
+  assert.equal(elements.get('backgroundWake').checked, false);
+  elements.get('backgroundWake').onchange({ target: { checked: true } });
+  elements.get('backgroundWake').onchange({ target: { checked: false } });
+  assert.deepEqual(calls.backgroundSettings, [true, false]);
+});
+test('background spoken command requires explicit tap instead of auto-executing', () => {
+  const { voice, calls, elements } = load();
+  voice.onJarvisPendingBackgroundCommand('открой браузер');
+  assert.deepEqual(calls.command, []);
+  assert.equal(elements.get('command').value, 'открой браузер');
+  assert.match(elements.get('message').textContent, /Нажмите/);
+});
+test('native can reject background permission and reset the checkbox', () => {
+  const { voice, elements } = load();
+  voice.onJarvisBackgroundWakeChanged(true);
+  assert.equal(elements.get('backgroundWake').checked, true);
+  voice.onJarvisBackgroundWakeChanged(false);
+  assert.equal(elements.get('backgroundWake').checked, false);
 });
