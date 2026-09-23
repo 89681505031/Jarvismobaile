@@ -158,8 +158,8 @@ test('PLUS skills, reminder and battery settings are opt-in and validate user ac
   context.window.AndroidJarvis.batteryMinutes = () => 30;
   context.window.AndroidJarvis.setBatteryMinutes = n => reminders.push('battery:' + n) || true;
   elements.get('voiceInterrupt').onchange({ target: { checked: true } });
-  elements.get('reminderText').value = 'проверить уроки';
-  elements.get('reminderMinutes').value = '10';
+  context.document.getElementById('reminderText').value = 'проверить уроки';
+  context.document.getElementById('reminderMinutes').value = '10';
   elements.get('addReminder').onclick();
   elements.get('batteryMinutes').onchange({ target: { value: '15' } });
   assert.deepEqual(reminders, ['interrupt:true', 'проверить уроки:10', 'battery:15']);
