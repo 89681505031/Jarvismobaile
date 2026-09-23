@@ -21,7 +21,7 @@ jobs:
         working-directory: memory-gateway
         run: npm ci && npm test
       - name: Verify voice interface
-        run: node --test tests/voice-ui.test.cjs
+        run: node --test tests/voice-ui.test.cjs tests/hud-v3.test.cjs
       - uses: actions/setup-java@v5
         with:
           distribution: temurin
