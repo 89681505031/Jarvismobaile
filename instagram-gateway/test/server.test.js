@@ -53,7 +53,9 @@ test('unsigned, tampered and malformed webhooks are rejected', () => withServer(
     headers: { 'x-hub-signature-256': signature }, body: text });
   assert.equal((await call(raw, '')).status, 401);
   assert.equal((await call(raw + ' ', sig)).status, 401);
-  assert.equal((await call('{', signed('{').sig)).status, 400);
+  const malformed = '{';
+  const malformedSig = 'sha256=' + createHmac('sha256', env.INSTAGRAM_APP_SECRET).update(malformed).digest('hex');
+  assert.equal((await call(malformed, malformedSig)).status, 400);
   assert.deepEqual((await (await fetch(base + '/admin/inbox', { headers: token })).json()).items, []);
 }));
 
@@ -96,3 +98,12 @@ test('fails closed when service is not configured', () => withServer(async ({ ba
   assert.equal((await fetch(base + '/admin/inbox')).status, 503);
   assert.equal((await fetch(base + '/webhook?hub.mode=subscribe')).status, 503);
 }, { INSTAGRAM_APP_SECRET: '', INSTAGRAM_WEBHOOK_VERIFY_TOKEN: '', INSTAGRAM_ACCOUNT_TOKEN: '' }));
+
+test('admin UI ships a restrictive policy and loads static assets', () => withServer(async ({ base }) => {
+  const html = await fetch(base + '/admin');
+  assert.equal(html.status, 200);
+  assert.match(html.headers.get('content-security-policy'), /frame-ancestors 'none'/);
+  assert.match(await html.text(), /Instagram/);
+  assert.equal((await fetch(base + '/admin.js')).status, 200);
+  assert.equal((await fetch(base + '/admin.css')).status, 200);
+}));
