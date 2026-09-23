@@ -144,6 +144,12 @@ body::after{
   transform:scale(1);
   --local-energy:var(--hud-energy);
   --local-bloom:var(--hud-bloom);
+  --hud-core-scale:1.016;
+  --hud-glow:24px;
+  --hud-listen-glow:30px;
+  --hud-speak-glow:36px;
+  --hud-core-alpha:.34;
+  --hud-wave-alpha:.65;
 }
 .orb span{border:0;box-shadow:none}
 .hud-ring{
@@ -190,14 +196,14 @@ body::after{
 .hud-core{
   position:absolute;
   inset:30.5%;border-radius:50%;
-  transform:scale(calc(1 + var(--local-energy) * .115));
+  transform:scale(var(--hud-core-scale));
   background:radial-gradient(circle at center,#020812 0 33%,#06223c 56%,#07131e 73%,#020a15 100%);
   border:2px solid #a1eeff;
   box-shadow:
-    0 0 calc(18px + var(--local-energy) * 48px) rgba(52,185,255,.8),
+    0 0 var(--hud-glow) rgba(52,185,255,.8),
     0 0 3px 2px #69d9ff,
     0 0 30px rgba(19,124,231,.35),
-    inset 0 0 calc(22px + var(--local-energy) * 30px) rgba(44,175,243,.36);
+    inset 0 0 28px rgba(44,175,243,.36);
   transition:transform .09s ease-out,box-shadow .1s linear;
   will-change:transform;
 }
@@ -209,13 +215,13 @@ body::after{
 .hud-core::after{
   content:"";position:absolute;inset:37%;border-radius:50%;
   background:radial-gradient(circle,rgba(157,235,255,.4),rgba(48,189,255,.1) 70%,transparent);
-  filter:blur(6px);opacity:calc(.25 + var(--local-energy) * .7);
+  filter:blur(6px);opacity:var(--hud-core-alpha);
 }
 .hud-wave{
   position:absolute;inset:0;width:100%;height:100%;
   pointer-events:none;
   filter:drop-shadow(0 0 4px rgba(39,193,255,.62));
-  opacity:calc(.56 + var(--local-energy) * .44);
+  opacity:var(--hud-wave-alpha);
 }
 .hud-cross{
   position:absolute;z-index:2;width:11px;height:11px;
@@ -238,14 +244,14 @@ body::after{
 }
 #jarvisOrb[data-mode="listening"] .hud-core{
   border-color:#adfaff;
-  box-shadow:0 0 calc(23px + var(--local-energy) * 56px) rgba(58,210,255,.94),
+  box-shadow:0 0 var(--hud-listen-glow) rgba(58,210,255,.94),
     0 0 3px 2px #b4f7ff,inset 0 0 32px rgba(63,220,255,.45);
 }
 #jarvisOrb[data-mode="listening"] .hud-ring--segments{animation-duration:9s}
 #jarvisOrb[data-mode="speaking"] .hud-ring--inner{animation-duration:4s}
 #jarvisOrb[data-mode="speaking"] .hud-core{
   border-color:#e3feff;
-  box-shadow:0 0 calc(25px + var(--local-energy) * 74px) rgba(57,197,255,.98),
+  box-shadow:0 0 var(--hud-speak-glow) rgba(57,197,255,.98),
     0 0 4px 2px #b6efff,inset 0 0 36px rgba(72,220,255,.54);
 }
 #jarvisOrb[data-mode="thinking"] .hud-ring--segments{animation-duration:3s}
