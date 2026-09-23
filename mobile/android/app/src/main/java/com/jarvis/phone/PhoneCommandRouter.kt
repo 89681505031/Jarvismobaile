@@ -35,7 +35,9 @@ class PhoneCommandRouter(private val context: Context) {
             lower == "вперед" || lower == "вперёд" || lower.contains("идти вперед") || lower.contains("идти вперёд") || lower.contains("перейди вперед") || lower.contains("перейди вперёд") ||
             lower == "домой" || lower == "главный экран" || lower.contains("на главный экран") || lower.contains("перейди домой") ||
             lower.contains("открой последние приложения") || lower.contains("покажи последние приложения") ||
-            lower == "включи музыку" || lower == "включи музыку яндекс" || lower == "открой яндекс музыку" ||
+            lower == "включи музыку" || lower == "продолжи музыку" ||
+            lower == "воспроизведи музыку" || lower == "играй музыку" ||
+            lower == "включи музыку яндекс" || lower == "открой яндекс музыку" ||
             lower.startsWith("включи песню ") || lower.startsWith("включи музыку ") ||
             lower == "стоп" || lower == "стоп музыка" || lower == "останови музыку" || lower == "пауза" ||
             lower == "следующая песня" || lower == "следующий трек" || lower == "дальше" ||
