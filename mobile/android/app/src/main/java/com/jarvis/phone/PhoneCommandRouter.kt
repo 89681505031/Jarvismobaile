@@ -25,6 +25,7 @@ class PhoneCommandRouter(private val context: Context) {
             lower.contains("открой настройки") || lower.contains("открой wi-fi") || lower.contains("открой wifi") || lower.contains("открой вай фай") || lower.contains("открой bluetooth") || lower.contains("открой блютуз") || lower.contains("открой режим полета") || lower.contains("открой авиарежим") || lower.contains("открой камеру") ||
             lower.startsWith("найди в интернете") || lower.startsWith("позвони ") ||
             lower.contains("кто звонил") || lower.contains("пропущенные вызовы") ||
+            lower == "открой инстаграм" || lower == "открой instagram" ||
             lower.startsWith("открой ") ||
             lower.contains("включи фонарик") || lower.contains("выключи фонарик") ||
             lower.contains("включи свет") || lower.contains("выключи свет") ||
@@ -92,8 +93,27 @@ class PhoneCommandRouter(private val context: Context) {
             lower == "следующая песня" || lower == "следующий трек" || lower == "дальше" -> musicControl("next")
             lower == "предыдущая песня" || lower == "предыдущий трек" || lower == "назад песню" -> musicControl("previous")
             lower.contains("прочитай последнее сообщение в ватсап") || lower.contains("прочитай последнее сообщение whatsapp") -> openWhatsAppForReading()
+            lower == "открой инстаграм" || lower == "открой instagram" -> openInstagram()
             lower.startsWith("открой ") -> openAllowedApp(command.drop(7).trim())
             else -> "Команда PHONE MODE пока не подключена: $command"
+        }
+    }
+
+    private fun openInstagram(): String {
+        val app = "com.instagram.android"
+        val installed = pm.getLaunchIntentForPackage(app) != null
+        if (installed) {
+            if (!allowedApps.isAllowed(app)) {
+                return "Instagram найден. Сначала разрешите его в разделе «Приложения» JARVIS."
+            }
+            return if (openPackage(app)) "Открываю Instagram." else "Не удалось открыть Instagram."
+        }
+        return try {
+            context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://www.instagram.com/"))
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            "Instagram не установлен. Открываю официальный сайт."
+        } catch (_: Exception) {
+            "Не удалось открыть Instagram."
         }
     }
 
