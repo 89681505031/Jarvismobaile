@@ -31,7 +31,9 @@ class MainActivity : Activity() {
     private lateinit var gigaChat: GigaChatClient
     private lateinit var speechInput: SpeechInputController
     private var pendingMicStart = false
+    private var pendingMicDiagnostics = false
     private var microphonePermissionPending = false
+    @Volatile private var diagnosticGeneration = 0
     private var speechGeneration = 0L
     private var speechTimeout: Runnable? = null
     private var tts: TextToSpeech? = null
@@ -42,7 +44,7 @@ class MainActivity : Activity() {
     private lateinit var cloudMemory: RedisMemoryGateway
     private var isSpeaking = false
     private var resumeListeningAfterSpeech = false
-    private var activityResumed = false
+    @Volatile private var activityResumed = false
     private val prefs by lazy { getSharedPreferences("jarvis_settings", MODE_PRIVATE) }
     private val backgroundExecutor = Executors.newSingleThreadExecutor()
     private val mainHandler = Handler(Looper.getMainLooper())
@@ -122,6 +124,49 @@ class MainActivity : Activity() {
         speechInput.start(durationMs)
     }
 
+    private fun requestMicrophoneDiagnostic() {
+        if (!activityResumed || isFinishing || isDestroyed) return
+        // A diagnostic is user-triggered, never a hidden background recording.
+        pendingMicStart = false
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+            pendingMicDiagnostics = true
+            if (!microphonePermissionPending) {
+                microphonePermissionPending = true
+                voiceEvent("onJarvisMicDiagnostic", "checking", "Разрешите микрофон для проверки.")
+                ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.RECORD_AUDIO), 7011)
+            }
+            return
+        }
+        runMicrophoneDiagnostic()
+    }
+
+    private fun runMicrophoneDiagnostic() {
+        if (!activityResumed || isFinishing || isDestroyed) return
+        pendingMicDiagnostics = false
+        speechInput.cancel()
+        stopSpeech()
+        val serviceAvailable = android.speech.SpeechRecognizer.isRecognitionAvailable(this)
+        val offlineAvailable = android.os.Build.VERSION.SDK_INT >= 31 &&
+            android.speech.SpeechRecognizer.isOnDeviceRecognitionAvailable(this)
+        val serviceStatus = when {
+            serviceAvailable -> "Системное распознавание: доступно."
+            offlineAvailable -> "Системное распознавание: только офлайн."
+            else -> "Сервис распознавания не найден: включите голосовой ввод Android."
+        }
+        val generation = ++diagnosticGeneration
+        voiceEvent("onJarvisMicDiagnostic", "checking", "Проверяю аудиосигнал ~2 секунды. Произнесите несколько слов.")
+        backgroundExecutor.execute {
+            val result = MicrophoneProbe.run(applicationContext) {
+                activityResumed && generation == diagnosticGeneration
+            }
+            runOnUiThread {
+                if (!isFinishing && !isDestroyed && activityResumed && generation == diagnosticGeneration) {
+                    voiceEvent("onJarvisMicDiagnostic", result.status, result.message + " " + serviceStatus)
+                }
+            }
+        }
+    }
+
     private fun startSystemSpeechInput() {
         val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
             putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
@@ -149,11 +194,19 @@ class MainActivity : Activity() {
         if (requestCode != 7011) return
         microphonePermissionPending = false
         val granted = ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
-        if (granted && pendingMicStart) {
-            if (activityResumed) startListening()
+        if (granted) {
+            if (pendingMicDiagnostics) {
+                if (activityResumed) runMicrophoneDiagnostic()
+            } else if (pendingMicStart && activityResumed) {
+                startListening()
+            }
         } else {
+            val diagnosticWasRequested = pendingMicDiagnostics
+            pendingMicDiagnostics = false
             pendingMicStart = false
-            voiceEvent("onJarvisSpeechError", "Доступ к микрофону не разрешён. Откройте настройки приложения → Разрешения → Микрофон.")
+            val message = "Доступ к микрофону не разрешён. Откройте настройки приложения → Разрешения → Микрофон."
+            if (diagnosticWasRequested) voiceEvent("onJarvisMicDiagnostic", "error", message)
+            else voiceEvent("onJarvisSpeechError", message)
         }
     }
 
@@ -161,11 +214,13 @@ class MainActivity : Activity() {
         super.onResume()
         activityResumed = true
         speechInput.resume()
-        if (pendingMicStart && !microphonePermissionPending) startListening()
+        if (pendingMicDiagnostics && !microphonePermissionPending) requestMicrophoneDiagnostic()
+        else if (pendingMicStart && !microphonePermissionPending) startListening()
     }
 
     override fun onPause() {
         activityResumed = false
+        diagnosticGeneration++
         speechInput.pause()
         stopSpeech()
         if (!microphonePermissionPending) pendingMicStart = false
@@ -566,6 +621,7 @@ class MainActivity : Activity() {
         }
 
         @JavascriptInterface fun startListening() { runOnUiThread { this@MainActivity.startListening() } }
+        @JavascriptInterface fun diagnoseMicrophone() { runOnUiThread { this@MainActivity.requestMicrophoneDiagnostic() } }
         @JavascriptInterface fun startConversationWindow(seconds: Int) {
             runOnUiThread { this@MainActivity.startConversationListening(seconds.coerceIn(1, 30) * 1000L) }
         }
@@ -646,6 +702,7 @@ class MainActivity : Activity() {
 
     override fun onDestroy() {
         activityResumed = false
+        diagnosticGeneration++
         mainHandler.removeCallbacksAndMessages(null)
         backgroundExecutor.shutdownNow()
         speechInput.destroy()
