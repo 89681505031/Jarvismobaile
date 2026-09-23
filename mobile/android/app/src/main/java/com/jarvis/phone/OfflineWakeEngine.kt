@@ -219,7 +219,7 @@ class OfflineWakeEngine(
         onMatch(match)
     }
 
-    fun stop() {
+    fun stop(onStopped: (() -> Unit)? = null) {
         check(Looper.myLooper() == Looper.getMainLooper())
         requested = false
         loading = false
@@ -233,8 +233,9 @@ class OfflineWakeEngine(
                 try { oldService?.cancel() } catch (_: Exception) {}
                 try { oldService?.shutdown() } catch (_: Exception) {}
                 try { oldRecognizer?.close() } catch (_: Exception) {}
+                if (onStopped != null) ui.post { if (!disposed) onStopped() }
             }
-        }
+        } else onStopped?.invoke()
     }
 
     fun release() {
