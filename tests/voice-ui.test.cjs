@@ -12,7 +12,7 @@ function load() {
     querySelector(tag) { return this.children.find(child => child.tag === tag); }
   }
   const elements = new Map();
-  const calls = { command: [], speak: [], start: 0, windows: 0, diagnostics: 0 };
+  const calls = { command: [], speak: [], start: 0, windows: 0, diagnostics: 0, wakeSettings: [] };
   const context = { document: { getElementById(id) {
     if (!elements.has(id)) elements.set(id, new Element()); return elements.get(id);
   }, createElement(tag) { const e = new Element(); e.tag = tag; return e; }, querySelectorAll() { return []; } },
@@ -20,6 +20,8 @@ function load() {
     command(text) { calls.command.push(text); return 'Ответ'; }, speak(text) { calls.speak.push(text); },
     startListening() { calls.start++; }, stopListening() {}, startConversationWindow() { calls.windows++; },
     diagnoseMicrophone() { calls.diagnostics++; },
+    getWakeModeEnabled() { return false; },
+    setWakeModeEnabled(enabled) { calls.wakeSettings.push(enabled); },
     setPersona() {}, listApps() { return JSON.stringify([{ label: '<img src=x onerror=alert(1)>', packageName: 'app', allowed: false }]); }
   } } };
   vm.createContext(context);
@@ -94,4 +96,31 @@ test('missing native diagnostic bridge shows an actionable error', () => {
   elements.get('diagnoseMic').onclick();
   assert.equal(elements.get('diagnoseMic').disabled, false);
   assert.equal(elements.get('micDiagnostics').attrs['data-status'], 'error');
+});
+
+test('foreground wake option is opt-in and sends explicit native settings change', () => {
+  const { calls, elements } = load();
+  assert.equal(elements.get('wakeMode').checked, false);
+  elements.get('wakeMode').onchange({ target: { checked: true } });
+  assert.deepEqual(calls.wakeSettings, [true]);
+});
+test('spoken persona name without command waits for the next phrase', () => {
+  const { voice, calls, elements } = load();
+  voice.onJarvisWakeStatus('listening', 'Жду имя');
+  voice.onJarvisWakeDetected('Astra', '');
+  assert.deepEqual(calls.command, []);
+  assert.match(elements.get('message').textContent, /Astra/);
+});
+test('wake name followed by command switches persona and executes exactly once', () => {
+  const { voice, calls } = load();
+  voice.onJarvisWakeDetected('Cyber', 'открой браузер');
+  assert.deepEqual(calls.command, ['открой браузер']);
+  assert.equal(calls.speak.length, 1);
+});
+test('wake standby is not treated as unrestricted dictation', () => {
+  const { voice, calls, elements } = load();
+  voice.onJarvisWakeStatus('listening', 'Жду имя');
+  assert.equal(elements.get('micStatus').textContent, 'Жду имя');
+  assert.equal(elements.get('orbButton').attrs['aria-busy'], 'false');
+  assert.deepEqual(calls.command, []);
 });
