@@ -43,6 +43,27 @@ if($('saveProfile'))$('saveProfile').onclick=register;if(localStorage.getItem('j
 modeButton.onclick=()=>{showMessage('Сейчас подключено управление телефоном. Управление ПК требует отдельного подключения.')};modeNav.onclick=()=>{showMessage('Сейчас подключено управление телефоном. Управление ПК требует отдельного подключения.')};appsNav.onclick=()=>{appsPanel.hidden=!appsPanel.hidden;commandsPanel.hidden=true;settingsPanel.hidden=true;if(!appsPanel.hidden)loadApps()};commandsNav.onclick=()=>{commandsPanel.hidden=!commandsPanel.hidden;appsPanel.hidden=true;settingsPanel.hidden=true};settingsNav.onclick=()=>{settingsPanel.hidden=!settingsPanel.hidden;appsPanel.hidden=true;commandsPanel.hidden=true;if(!settingsPanel.hidden)loadPersonas()};refreshApps.onclick=loadApps;if($('selectAllApps'))$('selectAllApps').onclick=selectAllApps;if($('appsSearch'))$('appsSearch').oninput=filterApps;send.onclick=()=>sendCommand();command.onkeydown=e=>{if(e.key==='Enter')sendCommand()};orbButton.onclick=startListening;orbButton.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();startListening()}};saveApiKeys.onclick=()=>{apiStatus.textContent=window.AndroidJarvis?.setApiKeys?.(fishApiKey.value.trim(),gigaApiKey.value.trim())||'Сохранение доступно в APK'};$('saveMemory').onclick=()=>{$('memoryStatus').textContent=window.AndroidJarvis?.setMemoryGateway?.($('memoryUrl').value.trim(),$('memoryToken').value.trim())||'Недоступно';$('memoryToken').value=''};$('disableMemory').onclick=()=>{$('memoryStatus').textContent=window.AndroidJarvis?.setMemoryGateway?.('','')||'Недоступно';$('memoryUrl').value='';$('memoryToken').value=''};$('memoryUrl').value=window.AndroidJarvis?.getMemoryGatewayUrl?.()||'';settingsNav.addEventListener('click',()=>{$('memoryStatus').textContent=window.AndroidJarvis?.getMemoryGatewayStatus?.()||'Недоступно'});$('memoryStatus').textContent=window.AndroidJarvis?.getMemoryGatewayStatus?.()||'Локальная память работает.';checkUpdates.onclick=()=>window.AndroidJarvis?.checkUpdates?.();render();
 $('microphoneSettings').onclick=()=>window.AndroidJarvis?.openMicrophoneSettings?.();
 $('wakeMode').checked=!!window.AndroidJarvis?.getWakeModeEnabled?.();
+$('backgroundWake').checked=!!window.AndroidJarvis?.getBackgroundWakeEnabled?.();
+window.onJarvisBackgroundWakeChanged=enabled=>{ $('backgroundWake').checked=!!enabled; };
+window.onJarvisBackgroundWakeStatus=(status,text)=>{
+  const info=$('backgroundWakeStatus');
+  info.textContent=text||'Фоновое ожидание';
+  info.setAttribute('data-status',status);
+};
+$('backgroundWake').onchange=e=>{
+  if(!window.AndroidJarvis?.setBackgroundWakeEnabled){
+    e.target.checked=false;
+    window.onJarvisBackgroundWakeStatus('error','Нужна версия J.A.R.V.I.S. BG.');
+    return;
+  }
+  // The native side may reject the request if microphone, model, or visible
+  // notification permission is absent; onJarvisBackgroundWakeChanged restores UI.
+  window.AndroidJarvis.setBackgroundWakeEnabled(!!e.target.checked);
+};
+window.onJarvisPendingBackgroundCommand=text=>{
+  command.value=String(text||'').slice(0,240);
+  showMessage('Команда из фонового режима: '+command.value+'. Нажмите ➤ для выполнения.');
+};
 window.onJarvisWakeModel=(status,text)=>{
   const info=$('wakeModelStatus');
   info.textContent=text||'Проверка офлайн-модели';
