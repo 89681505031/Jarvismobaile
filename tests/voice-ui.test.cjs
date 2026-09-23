@@ -170,9 +170,9 @@ test('PLUS home actions are manually triggered and cloud credentials are not ref
   const calls=[];
   context.window.AndroidJarvis.configureHome = (url, token, entity) => { calls.push({url,token,entity}); return 'Подключено'; };
   context.window.AndroidJarvis.controlSmartLight = on => {calls.push(on);return 'Отправляю команду';};
-  elements.get('homeUrl').value='https://home.example.com';
-  elements.get('homeToken').value='example-secret-123456789';
-  elements.get('homeEntity').value='light.desk';
+  context.document.getElementById('homeUrl').value='https://home.example.com';
+  context.document.getElementById('homeToken').value='example-secret-123456789';
+  context.document.getElementById('homeEntity').value='light.desk';
   elements.get('connectHome').onclick();
   assert.equal(elements.get('homeToken').value, '');
   elements.get('homeLightOn').onclick();
