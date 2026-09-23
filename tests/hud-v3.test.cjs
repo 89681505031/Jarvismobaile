@@ -82,7 +82,7 @@ test('native listening microphone level drives the glow and radial energy',()=>{
   assert.equal(elements.orbModeLabel.textContent,'ПРИНИМАЮ СИГНАЛ');
   assert.equal(existing(),1);
   window.onJarvisSpeechLevel(11);
-  frame(1000);
+  frame(400);
   assert.ok(Number(cssVars['--local-energy'])>.13,cssVars['--local-energy']);
   assert.ok(drawn.bars>0);
   assert.ok(frames.size>0);
@@ -94,7 +94,7 @@ test('Vosk partial activity is approximate and cannot interrupt speaking',()=>{
   const {window,frame}=load();
   window.onJarvisWakeStatus('listening','Жду имя');
   window.onJarvisWakeActivity(.78);
-  frame(1050);
+  frame(400);
   assert.ok(window.JarvisHudState.energy()>.14);
   window.onJarvisSpeakState('start',180);
   window.onJarvisWakeActivity(1);
