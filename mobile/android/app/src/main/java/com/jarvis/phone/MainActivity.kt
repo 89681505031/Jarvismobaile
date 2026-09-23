@@ -69,6 +69,8 @@ class MainActivity : Activity() {
     private lateinit var memory: JarvisMemory
     private lateinit var cloudMemory: RedisMemoryGateway
     private var isSpeaking = false
+    private var speechPlaybackStarted = false
+    private var speechTextLength = 0
     private var resumeListeningAfterSpeech = false
     @Volatile private var activityResumed = false
     private val prefs by lazy { getSharedPreferences("jarvis_settings", MODE_PRIVATE) }
@@ -104,7 +106,10 @@ class MainActivity : Activity() {
                 tts?.language = Locale("ru", "RU")
                 tts?.let { PersonaSpeech.apply(it, selectedPersona) }
                 tts?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
-                    override fun onStart(utteranceId: String?) = Unit
+                    override fun onStart(utteranceId: String?) {
+                        val id = utteranceId?.substringAfterLast("-")?.toLongOrNull()
+                        if (id != null) runOnUiThread { speechPlaybackBegan(id) }
+                    }
                     override fun onDone(utteranceId: String?) { utteranceId?.substringAfterLast("-")?.toLongOrNull()?.let { finishSpeech(it) } }
                     override fun onError(utteranceId: String?) { utteranceId?.substringAfterLast("-")?.toLongOrNull()?.let { finishSpeech(it) } }
                 })
@@ -609,10 +614,23 @@ class MainActivity : Activity() {
         super.onPause()
     }
 
+    private fun speechPlaybackBegan(generation: Long) {
+        if (generation != speechGeneration || !isSpeaking ||
+            speechPlaybackStarted || !activityResumed || isFinishing || isDestroyed) return
+        speechPlaybackStarted = true
+        // Starts Variant A exactly when the engine begins playback, not while
+        // a cloud audio file is still downloading / being prepared.
+        voiceEvent("onJarvisSpeechState", "speaking",
+            "J.A.R.V.I.S. отвечает. Нажмите на круг, чтобы прервать.")
+        voiceEvent("onJarvisSpeakState", "start", speechTextLength)
+    }
+
     private fun stopSpeech() {
-        val wasSpeaking = isSpeaking
+        val wasSpeaking = speechPlaybackStarted
         speechGeneration++
         isSpeaking = false
+        speechPlaybackStarted = false
+        speechTextLength = 0
         resumeListeningAfterSpeech = false
         tts?.stop()
         fishAudioTts.stop()
@@ -628,7 +646,11 @@ class MainActivity : Activity() {
             speechTimeout?.let { mainHandler.removeCallbacks(it) }
             speechTimeout = null
             isSpeaking = false
-            voiceEvent("onJarvisSpeakState", "stop")
+            val hadPlayback = speechPlaybackStarted
+            speechPlaybackStarted = false
+            speechTextLength = 0
+            if (hadPlayback) voiceEvent("onJarvisSpeakState", "stop")
+            else voiceEvent("onJarvisSpeechState", "idle", "Голосовой ответ завершён.")
             val resume = resumeListeningAfterSpeech
             resumeListeningAfterSpeech = false
             if (resume && activityResumed) startConversationListening(12_000)
@@ -650,11 +672,10 @@ class MainActivity : Activity() {
         speechInput.cancel()
         val generation = speechGeneration
         isSpeaking = true
+        speechPlaybackStarted = false
+        speechTextLength = text.length
         resumeListeningAfterSpeech = resumeAfterSpeech
-        voiceEvent("onJarvisSpeechState", "speaking", "J.A.R.V.I.S. отвечает. Нажмите на круг, чтобы прервать.")
-        // Variant A: JS synthesizes the reactor pulse only while native TTS
-        // actually owns the speech lifecycle. No fabricated audio amplitude.
-        voiceEvent("onJarvisSpeakState", "start", text.length)
+        voiceEvent("onJarvisSpeechState", "processing", "Готовлю голосовой ответ…")
         speechTimeout = Runnable {
             if (generation == speechGeneration) {
                 tts?.stop()
@@ -674,7 +695,8 @@ class MainActivity : Activity() {
         if (apiKey.isNotBlank() && FishAudioTts.voiceIdFor(selectedPersona) != null) {
             fishAudioTts.speak(text, selectedPersona,
                 onError = { runOnUiThread { speakWithSystemVoice(text, generation) } },
-                onComplete = { finishSpeech(generation) })
+                onComplete = { finishSpeech(generation) },
+                onStart = { runOnUiThread { speechPlaybackBegan(generation) } })
         } else speakWithSystemVoice(text, generation)
     }
 
