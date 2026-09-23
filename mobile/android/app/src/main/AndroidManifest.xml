@@ -23,7 +23,7 @@
         <package android:name="com.whatsapp" />
         <package android:name="com.whatsapp.w4b" />
     </queries>
-    <application android:name=".JarvisApplication" android:allowBackup="false" android:label="${jarvisLabel}" android:icon="@drawable/jarvis_icon" android:roundIcon="@drawable/jarvis_icon" android:theme="@style/Theme.JarvisPhone" android:usesCleartextTraffic="false" android:networkSecurityConfig="@xml/network_security_config">
+    <application android:name=".JarvisApplication" android:allowBackup="false" android:dataExtractionRules="@xml/data_extraction_rules" android:label="${jarvisLabel}" android:icon="@drawable/jarvis_icon" android:roundIcon="@drawable/jarvis_icon" android:theme="@style/Theme.JarvisPhone" android:usesCleartextTraffic="false" android:networkSecurityConfig="@xml/network_security_config">
         <service
             android:name=".WakeForegroundService"
             android:exported="false"
