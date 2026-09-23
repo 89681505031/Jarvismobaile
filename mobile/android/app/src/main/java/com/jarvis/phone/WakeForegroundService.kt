@@ -136,9 +136,10 @@ class WakeForegroundService : Service() {
                     // Android 14+ enforces both the microphone service type and
                     // its matching permission; start only from visible Activity.
                     try {
+                        val serviceType = if (android.os.Build.VERSION.SDK_INT >= 30)
+                            ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE else 0
                         ServiceCompat.startForeground(
-                            this, NOTIFICATION_ID, buildNotification(),
-                            ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
+                            this, NOTIFICATION_ID, buildNotification(), serviceType
                         )
                         foreground = true
                     } catch (_: SecurityException) {
