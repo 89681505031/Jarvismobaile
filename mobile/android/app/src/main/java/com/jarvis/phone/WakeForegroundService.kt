@@ -55,6 +55,7 @@ class WakeForegroundService : Service() {
     private var tts: TextToSpeech? = null
     private lateinit var fishAudioTts: FishAudioTts
     private lateinit var gigaChat: GigaChatClient
+    private lateinit var memory: JarvisMemory
     private lateinit var reminders: JarvisReminders
     private lateinit var home: JarvisHomeAssistant
     private val newsFeed = JarvisNewsFeed()
@@ -92,6 +93,7 @@ class WakeForegroundService : Service() {
         router = PhoneCommandRouter(this)
         fishAudioTts = FishAudioTts(this)
         gigaChat = GigaChatClient(this)
+        memory = JarvisMemory(this)
         reminders = JarvisReminders(this)
         home = JarvisHomeAssistant(this)
         offline = OfflineWakeEngine(
@@ -241,6 +243,7 @@ class WakeForegroundService : Service() {
     }
 
     private fun executeBackgroundCommand(phrase: String) {
+        memory.rememberSelfDisclosure(phrase)
         when (BackgroundInfoPolicy.classify(phrase)) {
             BackgroundInfoPolicy.Kind.TIME,
             BackgroundInfoPolicy.Kind.DATE -> {
@@ -363,11 +366,15 @@ class WakeForegroundService : Service() {
         pendingCommand = null
         notificationText = "GigaChat думает…"
         updateNotification()
-        val persona = getSharedPreferences("jarvis_settings", MODE_PRIVATE)
-            .getString("persona", "J.A.R.V.I.S.").orEmpty()
+        val settings = getSharedPreferences("jarvis_settings", MODE_PRIVATE)
+        val persona = settings.getString("persona", "J.A.R.V.I.S.").orEmpty()
+        val useMemory = settings.getBoolean("gigachat_memory_enabled", false)
 
         infoExecutor.execute {
-            val response = gigaChat.askConversation(phrase.take(4000), persona)
+            val context = if (useMemory) memory.approvedBrainFacts(phrase) else ""
+            val turns = if (useMemory) memory.recentDialogues().takeLast(6) else emptyList()
+            val response = gigaChat.askConversation(phrase.take(4000), persona, context, turns)
+            if (response.success) memory.rememberTurn(phrase, response.text)
             ui.post {
                 if (shuttingDown) return@post
                 cloudBusy = false
