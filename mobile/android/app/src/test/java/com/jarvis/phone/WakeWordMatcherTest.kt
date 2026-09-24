@@ -11,7 +11,7 @@ class WakeWordMatcherTest {
             "Астра" to "Astra", "Astra" to "Astra",
             "Луна" to "Luna", "Luna" to "Luna",
             "Терра" to "Terra", "Terra" to "Terra",
-            "Сайбер" to "Cyber", "кибер" to "Cyber", "Cyber" to "Cyber"
+            "Сайбер" to "Кибер", "кибер" to "Кибер", "Cyber" to "Кибер"
         )) assertEquals(name, WakeWordMatcher.parse(phrase)?.persona)
     }
 
