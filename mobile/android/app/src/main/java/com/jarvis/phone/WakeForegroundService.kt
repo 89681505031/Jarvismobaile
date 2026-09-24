@@ -527,8 +527,11 @@ class WakeForegroundService : Service() {
 
     private fun failClosed() {
         if (shuttingDown) return
-        getSharedPreferences("jarvis_settings", MODE_PRIVATE).edit()
-            .putBoolean("background_wake", false).apply()
+        // Stop audio capture safely, but do NOT erase the user's
+        // "listen while minimized" preference. Temporary microphone,
+        // battery, model, OEM or service failures must not uncheck it.
+        // Only an explicit user action (settings toggle / notification Stop)
+        // is allowed to persist background_wake=false.
         shouldListenInBackground = false
         microphoneHandoffReady = false
         offline.stop()
