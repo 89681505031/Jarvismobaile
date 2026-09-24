@@ -219,7 +219,7 @@ class OfflineWakeEngine(
                     if (!svc.startListening(listener)) {
                         stop()
                         onStatus("error", "Не удалось запустить офлайн-распознавание.")
-                    } else onStatus("listening", "Тихое ожидание: Джарвис, Астра, Луна, Терра, Сайбер")
+                    } else onStatus("listening", "Тихое ожидание: Джарвис, Астра, Луна, Терра, Кибер")
                 }
             } catch (e: Exception) {
                 try { serviceCandidate?.shutdown() } catch (_: Exception) {}
