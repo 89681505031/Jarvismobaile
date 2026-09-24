@@ -199,7 +199,7 @@ class WakeForegroundService : Service() {
         startedAtElapsed = 0L
         ui.removeCallbacks(batteryCheck)
         pendingCommand = null
-        notificationText = "Работа в фоне включена. Откройте JARVIS для обычных команд."
+        notificationText = "JARVIS открыт: микрофон временно передан экрану."
         updateNotification()
         offline.stop { if (!shuttingDown) afterStopped() }
     }
