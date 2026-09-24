@@ -23,13 +23,14 @@
     speaking:['ГОЛОСОВОЙ ОТВЕТ','JARVIS отвечает. Нажмите, чтобы остановить'],
     thinking:['ОБРАБОТКА ДАННЫХ','JARVIS обрабатывает команду']
   };
-  const avatars={
-    'J.A.R.V.I.S.':'holograms/jarvis.webp',
-    'Astra':'holograms/astra.webp',
-    'Luna':'holograms/luna.webp',
-    'Terra':'holograms/terra.webp',
-    'Кибер':'holograms/kiber.webp'
+  const avatarIndex={
+    'J.A.R.V.I.S.':0,
+    'Astra':1,
+    'Luna':2,
+    'Terra':3,
+    'Кибер':4
   };
+  const avatarSprite='hologram-sprite.webp';
   const ctx=canvas&&typeof canvas.getContext==='function'?canvas.getContext('2d'):null;
   let mode='idle',level=.12,target=.12,micUpdateAt=0,speechStart=0,speechSize=60;
   let voiceUpdateAt=0,voiceTarget=0,raf=0,lastFrame=0,wakeListening=false,blinkTimer=0;
@@ -49,9 +50,15 @@
   }
   function setPersona(name){
     const persona=canonicalPersona(name);
-    const src=avatars[persona]||avatars['J.A.R.V.I.S.'];
-    if(face&&face.getAttribute?.('src')!==src)face.setAttribute('src',src);
-    if(mouthFace&&mouthFace.getAttribute?.('src')!==src)mouthFace.setAttribute('src',src);
+    const index=avatarIndex[persona]??0;
+    if(face){
+      if(face.getAttribute?.('src')!==avatarSprite)face.setAttribute('src',avatarSprite);
+      face.style.left=(-index*100)+'%';
+    }
+    if(mouthFace){
+      if(mouthFace.getAttribute?.('src')!==avatarSprite)mouthFace.setAttribute('src',avatarSprite);
+      mouthFace.style.left=(-index*100)+'%';
+    }
     if(avatar){avatar.dataset.persona=persona;avatar.style?.setProperty('--holo-mouth-scale','1');}
     if(personaName)personaName.textContent=persona;
   }
