@@ -503,9 +503,9 @@ body::after{
 /* HUD v6 — Gideon-style point-cloud hologram and safe lip sync. */
 .holo-avatar{
   position:absolute;
-  inset:11.8%;
+  inset:6% 9% 5%;
   z-index:3;
-  border-radius:50%;
+  border-radius:18%;
   overflow:visible;
   pointer-events:none;
   --voice-lift:0px;
@@ -534,25 +534,24 @@ body::after{
   animation:holoAura 4.1s ease-in-out infinite;
 }
 .holo-avatar::after{
-  inset:1%;
+  inset:-2% -5%;
+  border-radius:8%;
   background:
-    repeating-linear-gradient(180deg,rgba(152,239,255,.08) 0 1px,transparent 1px 5px),
-    repeating-linear-gradient(90deg,rgba(152,239,255,.035) 0 1px,transparent 1px 8px),
-    radial-gradient(circle at 50% 48%,transparent 0 60%,rgba(93,222,255,.14) 72%,transparent 82%);
+    radial-gradient(circle,rgba(171,236,255,.22) 0 1px,transparent 1.4px) 0 0/7px 7px,
+    linear-gradient(180deg,rgba(111,93,255,.06),rgba(86,193,255,.03) 48%,rgba(91,71,255,.08));
   mix-blend-mode:screen;
-  opacity:.68;
+  opacity:.16;
+  transform:perspective(420px) rotateY(-2deg);
   animation:holoMeshDrift 4.2s linear infinite;
 }
 .holo-motion{
   position:absolute;
   inset:0;
-  border-radius:50%;
-  overflow:hidden;
+  border-radius:0;
+  overflow:visible;
   transform-origin:50% 76%;
   animation:holoFloat 5.2s ease-in-out infinite;
   will-change:transform;
-  -webkit-mask-image:radial-gradient(circle at 50% 50%,#000 0 72%,rgba(0,0,0,.98) 79%,transparent 100%);
-  mask-image:radial-gradient(circle at 50% 50%,#000 0 72%,rgba(0,0,0,.98) 79%,transparent 100%);
 }
 .holo-face{
   position:absolute;
@@ -562,9 +561,9 @@ body::after{
   object-position:center;
   user-select:none;
   -webkit-user-drag:none;
-  opacity:.34;
-  transform:translate3d(calc(var(--talk-x) * -.12),calc(var(--talk-y) * .18 - var(--voice-lift) * .10),0) rotate(calc(var(--talk-tilt) * .35)) scale(calc(1.02 * var(--voice-scale)));
-  filter:saturate(1.6) contrast(1.12) brightness(.88) blur(.2px);
+  opacity:.045;
+  transform:scale(1.02);
+  filter:saturate(1.8) contrast(1.2) brightness(.9) blur(.45px);
 }
 .holo-mesh{
   position:absolute;
@@ -620,7 +619,7 @@ body::after{
 }
 #jarvisOrb[data-mode="listening"] .holo-avatar{filter:drop-shadow(0 0 var(--hud-listen-glow) rgba(94,228,255,.86))}
 #jarvisOrb[data-mode="speaking"] .holo-avatar{filter:drop-shadow(0 0 var(--hud-speak-glow) rgba(121,239,255,.98))}
-#jarvisOrb[data-mode="speaking"] .holo-face{opacity:.26;filter:saturate(1.7) contrast(1.15) brightness(.82)}
+#jarvisOrb[data-mode="speaking"] .holo-face{opacity:.03;filter:saturate(1.8) contrast(1.18) brightness(.82)}
 #jarvisOrb[data-mode="thinking"] .holo-avatar{opacity:.94}
 @keyframes holoFloat{
   0%,100%{transform:translate3d(-1.2px,2.2px,0) rotateZ(-.52deg) scale(var(--voice-scale))}
@@ -638,3 +637,9 @@ body::after{
   .holo-motion,.holo-avatar::before,.holo-avatar::after,.holo-scan{animation:none!important}
   .holo-lid{transition:none!important}
 }
+
+/* Let the volumetric face dominate instead of looking like a radar portrait. */
+#jarvisOrb .hud-ring--fine{opacity:.16}
+#jarvisOrb .hud-ring--inner{opacity:.34}
+#jarvisOrb[data-mode="speaking"] .hud-ring--fine{opacity:.10}
+#jarvisOrb[data-mode="speaking"] .hud-ring--inner{opacity:.22}
