@@ -92,7 +92,7 @@ class GigaChatClient(private val context: Context) {
         val messages = JSONArray()
         val system = GigaChatBrainPolicy.systemPrompt(persona) + if (memoryContext.isBlank()) ""
             else "\n\nКонтекст, который пользователь разрешил использовать:\n" +
-                memoryContext.take(6500)
+                memoryContext.take(12000)
         messages.put(message("system", system))
         // Structured user/assistant turns (not a flattened blob pretending to be
         // a system message). Bounded to keep token use and private context small.
