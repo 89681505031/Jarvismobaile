@@ -2,6 +2,7 @@ package com.jarvis.phone
 
 import android.content.Context
 import android.media.MediaPlayer
+import android.media.audiofx.Visualizer
 import android.os.Handler
 import android.os.Looper
 import org.json.JSONObject
@@ -9,6 +10,7 @@ import java.io.File
 import java.net.HttpURLConnection
 import java.net.URL
 import java.util.concurrent.Executors
+import kotlin.math.sqrt
 
 class FishAudioTts(private val context: Context) {
     companion object {
@@ -141,7 +143,7 @@ class FishAudioTts(private val context: Context) {
                     waveform: ByteArray?,
                     samplingRate: Int
                 ) {
-                    if (waveform.isNullOrEmpty() || token != generation.get() || closed) return
+                    if (waveform == null || waveform.isEmpty() || token != generation.get() || closed) return
                     var sum = 0.0
                     for (sample in waveform) {
                         val centered = (sample.toInt() and 0xff) - 128
