@@ -18,6 +18,7 @@ import android.speech.tts.UtteranceProgressListener
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
 import java.util.Locale
+import java.util.concurrent.Executors
 
 /**
  * Opt-in microphone foreground service. It MUST be created by an Activity while
@@ -49,6 +50,13 @@ class WakeForegroundService : Service() {
     private lateinit var offline: OfflineWakeEngine
     private lateinit var router: PhoneCommandRouter
     private var tts: TextToSpeech? = null
+    private lateinit var fishAudioTts: FishAudioTts
+    private lateinit var gigaChat: GigaChatClient
+    private lateinit var reminders: JarvisReminders
+    private lateinit var home: JarvisHomeAssistant
+    private val newsFeed = JarvisNewsFeed()
+    private val infoExecutor = Executors.newSingleThreadExecutor()
+    private var cloudBusy = false
     private var ttsReady = false
     private var speaking = false
     private var suppressUntil = 0L
@@ -79,6 +87,10 @@ class WakeForegroundService : Service() {
     override fun onCreate() {
         super.onCreate()
         router = PhoneCommandRouter(this)
+        fishAudioTts = FishAudioTts(this)
+        gigaChat = GigaChatClient(this)
+        reminders = JarvisReminders(this)
+        home = JarvisHomeAssistant(this)
         offline = OfflineWakeEngine(
             this,
             onStatus = { status, message ->
@@ -190,7 +202,7 @@ class WakeForegroundService : Service() {
 
     private fun onWake(match: WakeWordMatcher.Activation) {
         if (shuttingDown || !shouldListenInBackground || !foreground) return
-        if (speaking || SystemClock.elapsedRealtime() < suppressUntil) return
+        if (cloudBusy || speaking || SystemClock.elapsedRealtime() < suppressUntil) return
         // A wake name is required before any background action.
         getSharedPreferences("jarvis_settings", MODE_PRIVATE).edit()
             .putString("persona", match.persona).apply()
@@ -215,7 +227,7 @@ class WakeForegroundService : Service() {
 
     private fun onFollowUp(phrase: String) {
         if (shuttingDown || !shouldListenInBackground || !foreground) return
-        if (speaking || SystemClock.elapsedRealtime() < suppressUntil) return
+        if (cloudBusy || speaking || SystemClock.elapsedRealtime() < suppressUntil) return
         if (armedUntil == 0L || SystemClock.elapsedRealtime() > armedUntil) {
             armedUntil = 0L
             return
@@ -225,31 +237,221 @@ class WakeForegroundService : Service() {
     }
 
     private fun executeBackgroundCommand(phrase: String) {
+        when (BackgroundInfoPolicy.classify(phrase)) {
+            BackgroundInfoPolicy.Kind.TIME,
+            BackgroundInfoPolicy.Kind.DATE -> {
+                val response = OfflineKnowledge.answer(phrase)
+                    ?: "Не удалось определить время или дату."
+                notificationText = response
+                updateNotification()
+                speak(response)
+                return
+            }
+            BackgroundInfoPolicy.Kind.MAIN_NEWS -> {
+                fetchBackgroundNews()
+                return
+            }
+            null -> Unit
+        }
+
+        val normalized = BackgroundCommandPolicy.normalize(phrase)
+
+        // Local reminders do not need the Activity.
+        if (normalized == "мои напоминания" || normalized == "список напоминаний") {
+            val response = reminders.list()
+            notificationText = response.take(220)
+            updateNotification()
+            speak(response)
+            return
+        }
+        JarvisReminders.parseRussian(phrase)?.let { parsed ->
+            val response = reminders.schedule(parsed.second, parsed.first)
+            notificationText = response
+            updateNotification()
+            speak(response)
+            return
+        }
+
+        // The single configured Home Assistant light is an explicit, bounded
+        // action and can be controlled while minimized.
+        if (normalized in setOf(
+                "включи умный свет", "выключи умный свет",
+                "включи домашний свет", "выключи домашний свет"
+            )
+        ) {
+            val on = normalized.startsWith("включи")
+            runBackgroundTask("Управляю выбранным светом…") { home.setLight(on) }
+            return
+        }
+
         if (BackgroundCommandPolicy.permitted(phrase)) {
             val response = try { router.execute(phrase) } catch (_: Exception) {
-                "Не удалось выполнить команду. Откройте JARVIS."
+                "Не удалось выполнить команду."
             }
             notificationText = response
             updateNotification()
             speak(response)
+            return
+        }
+
+        // Exact location is intentionally unavailable to the minimized service.
+        // Weather/local-news asks the user to open the app instead of silently
+        // turning on background location tracking.
+        val needsLocation = normalized.contains("погод") ||
+            normalized.contains("местн") && normalized.contains("новост") ||
+            normalized.contains("новост") && (
+                normalized.contains("рядом") ||
+                normalized.contains("моем городе") ||
+                normalized.contains("моём городе") ||
+                normalized.contains("по месту")
+            )
+        if (needsLocation) {
+            deferToVisibleApp(
+                phrase,
+                "Для погоды и местных новостей откройте JARVIS: приложению нужно только примерное местоположение."
+            )
+            return
+        }
+
+        // Launching apps, calls, searches or reading private messages changes
+        // the visible UI / needs a permission surface, so Android requires user
+        // involvement. Keep these behind the ongoing notification.
+        if (BackgroundCommandPolicy.requiresVisibleUi(phrase) || router.canHandle(phrase)) {
+            deferToVisibleApp(
+                phrase,
+                "Эта команда меняет экран или требует разрешения Android. Нажмите на уведомление JARVIS."
+            )
+            return
+        }
+
+        // Ordinary questions no longer force the app open: GigaChat can answer
+        // directly from the foreground microphone service.
+        if (gigaChat.configured()) {
+            askGigaChatInBackground(phrase)
         } else {
-            // Background activity launches, calls, message access and network AI
-            // are NOT silently attempted from a service. User must tap first.
-            pendingCommand = phrase.take(240)
-            notificationText = "Нажмите на уведомление, чтобы продолжить команду в JARVIS"
-            updateNotification()
-            speak("Для этой команды откройте Джарвис через уведомление.")
+            deferToVisibleApp(
+                phrase,
+                "GigaChat ещё не подключён. Откройте JARVIS и настройте мозг GigaChat."
+            )
+        }
+    }
+
+    private fun runBackgroundTask(status: String, work: () -> String) {
+        if (cloudBusy || shuttingDown) return
+        cloudBusy = true
+        notificationText = status
+        updateNotification()
+        infoExecutor.execute {
+            val response = try { work() } catch (_: Exception) { "Не удалось выполнить команду." }
+            ui.post {
+                if (shuttingDown) return@post
+                cloudBusy = false
+                notificationText = response.take(220)
+                updateNotification()
+                speak(response)
+            }
+        }
+    }
+
+    private fun askGigaChatInBackground(phrase: String) {
+        if (cloudBusy || shuttingDown) return
+        cloudBusy = true
+        pendingCommand = null
+        notificationText = "GigaChat думает…"
+        updateNotification()
+        val persona = getSharedPreferences("jarvis_settings", MODE_PRIVATE)
+            .getString("persona", "J.A.R.V.I.S.").orEmpty()
+
+        infoExecutor.execute {
+            val response = gigaChat.askConversation(phrase.take(4000), persona)
+            ui.post {
+                if (shuttingDown) return@post
+                cloudBusy = false
+                notificationText = response.text.take(220)
+                updateNotification()
+                speak(response.text)
+            }
+        }
+    }
+
+    private fun deferToVisibleApp(phrase: String, message: String) {
+        pendingCommand = phrase.take(240)
+        notificationText = message
+        updateNotification()
+        speak(message)
+    }
+
+    private fun fetchBackgroundNews() {
+        if (cloudBusy || shuttingDown) return
+        cloudBusy = true
+        pendingCommand = null
+        notificationText = "Получаю главную сводку новостей…"
+        updateNotification()
+        speak("Получаю главные новости")
+
+        val persona = getSharedPreferences("jarvis_settings", MODE_PRIVATE)
+            .getString("persona", "J.A.R.V.I.S.").orEmpty()
+
+        infoExecutor.execute {
+            val summary = try {
+                val items = newsFeed.fetchMainHeadlines()
+                val prompt = "Сделай короткую нейтральную голосовую сводку главных свежих новостей. " +
+                    "Используй только эти заголовки, не придумывай детали. Назови 4-6 тем: " +
+                    items.joinToString(" | ")
+                val response = gigaChat.askConversation(prompt, persona)
+                if (response.success) response.text
+                else "Главные свежие новости: " + items.take(5).joinToString(". ")
+            } catch (_: Exception) {
+                "Не удалось получить главные новости. Проверьте интернет и повторите."
+            }
+
+            ui.post {
+                if (shuttingDown) return@post
+                cloudBusy = false
+                notificationText = summary.take(220)
+                updateNotification()
+                speak(summary)
+            }
         }
     }
 
     private fun speak(text: String) {
-        tts?.let {
-            val persona = getSharedPreferences("jarvis_settings", MODE_PRIVATE)
-                .getString("persona", "J.A.R.V.I.S.").orEmpty()
-            PersonaSpeech.apply(it, persona)
-        }
-        if (!ttsReady || text.isBlank()) {
+        if (text.isBlank() || shuttingDown) {
             suppressUntil = SystemClock.elapsedRealtime() + 1_000L
+            return
+        }
+        val settings = getSharedPreferences("jarvis_settings", MODE_PRIVATE)
+        val persona = settings.getString("persona", "J.A.R.V.I.S.").orEmpty()
+        val fishKey = settings.getString("fish_api_key", "").orEmpty().trim()
+
+        speaking = true
+        // Keep the selected premium voice in the minimized foreground-service
+        // mode too. If Fish Audio is absent/offline, fall back to Android TTS.
+        if (fishKey.isNotBlank() && FishAudioTts.voiceIdFor(persona) != null) {
+            fishAudioTts.speak(
+                text = text,
+                persona = persona,
+                onError = {
+                    ui.post {
+                        if (!shuttingDown) speakWithSystemVoice(text, persona)
+                    }
+                },
+                onComplete = { ui.post { if (!shuttingDown) endSpeech() } },
+                onStart = { ui.post { if (!shuttingDown) speaking = true } }
+            )
+        } else {
+            speakWithSystemVoice(text, persona)
+        }
+    }
+
+    private fun speakWithSystemVoice(text: String, persona: String) {
+        if (shuttingDown || text.isBlank()) {
+            endSpeech()
+            return
+        }
+        tts?.let { PersonaSpeech.apply(it, persona) }
+        if (!ttsReady) {
+            endSpeech()
             return
         }
         speaking = true
@@ -337,6 +539,8 @@ class WakeForegroundService : Service() {
         armedUntil = 0L
         ui.removeCallbacksAndMessages(null)
         try { offline.release() } catch (_: Exception) {}
+        try { infoExecutor.shutdownNow() } catch (_: Exception) {}
+        try { fishAudioTts.release() } catch (_: Exception) {}
         try { tts?.stop(); tts?.shutdown() } catch (_: Exception) {}
         active = null
         foreground = false

@@ -57,6 +57,11 @@ class MainActivity : Activity() {
     private lateinit var home: JarvisHomeAssistant
     private lateinit var vision: JarvisVision
     private lateinit var updates: JarvisSignedUpdates
+    private lateinit var localInfo: JarvisLocalInfo
+    private val newsFeed = JarvisNewsFeed()
+    private var pendingWeatherLocation = false
+    private var pendingLocalNewsLocation = false
+    private var pendingLocationOnly = false
     private var wakeSessionActive = false
     private var wakeFailures = 0
     private var wakeRestart: Runnable? = null
@@ -89,6 +94,7 @@ class MainActivity : Activity() {
         reminders = JarvisReminders(this)
         home = JarvisHomeAssistant(this)
         vision = JarvisVision(this)
+        localInfo = JarvisLocalInfo(this)
         updates = JarvisSignedUpdates(this) { status ->
             runOnUiThread {
                 voiceEvent("onJarvisFeatureStatus", "updates", status)
@@ -498,6 +504,31 @@ class MainActivity : Activity() {
 
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == 7421) {
+            val granted = ContextCompat.checkSelfPermission(
+                this, Manifest.permission.ACCESS_COARSE_LOCATION
+            ) == PackageManager.PERMISSION_GRANTED
+            val weather = pendingWeatherLocation
+            val localNews = pendingLocalNewsLocation
+            val justPermission = pendingLocationOnly
+            pendingWeatherLocation = false
+            pendingLocalNewsLocation = false
+            pendingLocationOnly = false
+            if (granted) {
+                voiceEvent("onJarvisLocationStatus", "granted",
+                    "Примерное местоположение разрешено только для погоды и местных новостей.")
+                when {
+                    weather -> fetchWeatherAndSpeak()
+                    localNews -> fetchLocalNewsAndSpeak()
+                    justPermission -> showVoiceStatus("Примерное местоположение разрешено.")
+                }
+            } else {
+                val message = "Местоположение не разрешено. Погода и местные новости по району останутся выключены."
+                voiceEvent("onJarvisLocationStatus", "denied", message)
+                if (weather || localNews) speak(message, resumeAfterSpeech = true)
+            }
+            return
+        }
         if (requestCode == 7413) {
             val wanted = pendingCameraPermission
             pendingCameraPermission = false
@@ -742,81 +773,104 @@ class MainActivity : Activity() {
     private fun fetchNewsAndSpeak() {
         showVoiceStatus("Получаю свежие новости…")
         backgroundExecutor.execute {
-            try {
-                val feeds = listOf(
-                    "https://news.google.com/rss?hl=ru&gl=RU&ceid=RU:ru",
-                    "https://news.google.com/rss?hl=ru&gl=US&ceid=US:ru"
-                )
-                var items = emptyList<String>()
-                var lastError: Exception? = null
-
-                for (feed in feeds) {
-                    try {
-                        val connection = (URL(feed).openConnection() as HttpURLConnection).apply {
-                            requestMethod = "GET"
-                            connectTimeout = 10_000
-                            readTimeout = 20_000
-                            instanceFollowRedirects = true
-                            setRequestProperty("User-Agent", "Mozilla/5.0 JARVIS-Android")
-                            setRequestProperty("Accept", "application/rss+xml, application/xml, text/xml")
-                        }
-                        val code = connection.responseCode
-                        val stream = if (code in 200..299) connection.inputStream else connection.errorStream
-                        val xml = stream?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }.orEmpty()
-                        connection.disconnect()
-                        if (code !in 200..299) throw IllegalStateException("HTTP $code")
-
-                        items = Regex("<item>([\\s\\S]*?)</item>", RegexOption.IGNORE_CASE)
-                            .findAll(xml)
-                            .mapNotNull { match ->
-                                val block = match.groupValues[1]
-                                val title = Regex("<title>([\\s\\S]*?)</title>", RegexOption.IGNORE_CASE)
-                                    .find(block)?.groupValues?.get(1)
-                                    ?.replace("<![CDATA[", "")?.replace("]]>", "")
-                                    ?.let { Html.fromHtml(it, Html.FROM_HTML_MODE_LEGACY).toString().trim() }
-                                val source = Regex("<source[^>]*>([\\s\\S]*?)</source>", RegexOption.IGNORE_CASE)
-                                    .find(block)?.groupValues?.get(1)
-                                    ?.replace("<![CDATA[", "")?.replace("]]>", "")
-                                    ?.let { Html.fromHtml(it, Html.FROM_HTML_MODE_LEGACY).toString().trim() }
-                                title?.takeIf { it.isNotBlank() }?.let {
-                                    if (source.isNullOrBlank()) it else "$it — $source"
-                                }
-                            }
-                            .distinct()
-                            .take(6)
-                            .toList()
-                        if (items.isNotEmpty()) break
-                    } catch (e: Exception) {
-                        lastError = e
-                    }
-                }
-
-                if (items.isEmpty()) throw lastError ?: IllegalStateException("В новостной ленте нет материалов.")
-                val prompt = "Сделай краткую нейтральную голосовую сводку свежих новостей на русском языке. Назови 5-6 главных тем по заголовкам ниже, по 1-2 предложения на тему. Не придумывай факты и явно отделяй заголовок от неподтвержденных деталей. Заголовки: " + items.joinToString(" | ")
+            val finalText = try {
+                val items = newsFeed.fetchMainHeadlines()
+                val prompt = "Сделай краткую нейтральную голосовую сводку свежих новостей на русском языке. " +
+                    "Назови 5-6 главных тем по заголовкам ниже, по 1-2 предложения на тему. " +
+                    "Не придумывай факты и явно отделяй заголовок от неподтвержденных деталей. Заголовки: " +
+                    items.joinToString(" | ")
                 val response = gigaChat.askConversation(prompt, selectedPersona)
-                val finalText = if (!response.success) {
-                    "Свежие новости по заголовкам: " + items.take(5).joinToString(". ")
-                } else response.text
-                runOnUiThread {
-                    if (isFinishing || isDestroyed) return@runOnUiThread
-                    if (::webView.isInitialized) {
-                        webView.evaluateJavascript("window.onGigaChatResult && window.onGigaChatResult(${JSONObject.quote(finalText)})", null)
-                    }
-                    speak(finalText, resumeAfterSpeech = true)
-                }
-            } catch (e: Exception) {
-                val message = "Не удалось получить свежие новости: ${e.message ?: "ошибка соединения"}"
-                runOnUiThread {
-                    if (isFinishing || isDestroyed) return@runOnUiThread
-                    if (::webView.isInitialized) {
-                        webView.evaluateJavascript("window.onGigaChatResult && window.onGigaChatResult(${JSONObject.quote(message)})", null)
-                    }
-                    speak(message, resumeAfterSpeech = true)
-                }
+                if (response.success) response.text
+                else "Свежие новости по заголовкам: " + items.take(5).joinToString(". ")
+            } catch (_: Exception) {
+                "Не удалось получить свежие новости. Проверьте интернет и повторите запрос."
+            }
+            runOnUiThread {
+                if (isFinishing || isDestroyed) return@runOnUiThread
+                voiceEvent("onGigaChatResult", finalText)
+                speak(finalText, resumeAfterSpeech = true)
             }
         }
     }
 
+    private fun hasApproximateLocation(): Boolean =
+        ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) ==
+            PackageManager.PERMISSION_GRANTED
+
+    private fun requestApproximateLocation(forWeather: Boolean = false, forLocalNews: Boolean = false) {
+        if (hasApproximateLocation()) {
+            when {
+                forWeather -> fetchWeatherAndSpeak()
+                forLocalNews -> fetchLocalNewsAndSpeak()
+                else -> voiceEvent("onJarvisLocationStatus", "granted",
+                    "Примерное местоположение уже разрешено.")
+            }
+            return
+        }
+        pendingWeatherLocation = forWeather
+        pendingLocalNewsLocation = forLocalNews
+        pendingLocationOnly = !forWeather && !forLocalNews
+        runOnUiThread {
+            if (isFinishing || isDestroyed) return@runOnUiThread
+            voiceEvent("onJarvisLocationStatus", "request",
+                "Android попросит примерное местоположение. Точная геопозиция не нужна.")
+            ActivityCompat.requestPermissions(
+                this,
+                arrayOf(Manifest.permission.ACCESS_COARSE_LOCATION),
+                7421
+            )
+        }
+    }
+
+    private fun fetchWeatherAndSpeak() {
+        if (!hasApproximateLocation()) {
+            requestApproximateLocation(forWeather = true)
+            return
+        }
+        showVoiceStatus("Определяю примерный район и получаю погоду…")
+        localInfo.requestWeather { weather ->
+            runOnUiThread {
+                if (isFinishing || isDestroyed) return@runOnUiThread
+                voiceEvent("onJarvisLocalInfo", "weather", weather)
+                voiceEvent("onGigaChatResult", weather)
+                speak(weather, resumeAfterSpeech = true)
+            }
+        }
+    }
+
+    private fun fetchLocalNewsAndSpeak() {
+        if (!hasApproximateLocation()) {
+            requestApproximateLocation(forLocalNews = true)
+            return
+        }
+        showVoiceStatus("Ищу свежие новости рядом с текущим районом…")
+        localInfo.requestLocalNewsHeadlines { result ->
+            val value = result.fold(
+                onSuccess = { (place, headlines) ->
+                    if (headlines.isEmpty()) {
+                        "Не нашёл свежих местных заголовков для ${place.label}."
+                    } else {
+                        val prompt = "Сделай короткую нейтральную голосовую сводку местных новостей для " +
+                            place.label + ". Используй только заголовки ниже, не придумывай детали. " +
+                            "Назови 4–6 важных тем. Заголовки: " + headlines.joinToString(" | ")
+                        val response = gigaChat.askConversation(prompt, selectedPersona)
+                        if (response.success) response.text
+                        else "Свежие местные заголовки для ${place.label}: " +
+                            headlines.take(5).joinToString(". ")
+                    }
+                },
+                onFailure = {
+                    "Не удалось получить местные новости. Проверьте интернет, геолокацию и повторите."
+                }
+            )
+            runOnUiThread {
+                if (isFinishing || isDestroyed) return@runOnUiThread
+                voiceEvent("onJarvisLocalInfo", "local_news", value)
+                voiceEvent("onGigaChatResult", value)
+                speak(value, resumeAfterSpeech = true)
+            }
+        }
+    }
     private fun analyzeLatestWhatsApp() {
         mainHandler.postDelayed({
             backgroundExecutor.execute {
@@ -990,7 +1044,9 @@ class MainActivity : Activity() {
                 val parsed = JarvisReminders.parseRussian(memoryText)
                 if (parsed != null) return reminders.schedule(parsed.second, parsed.first)
             }
-            if (skills.enabled("offline")) OfflineKnowledge.answer(memoryText)?.let { return it }
+            // Time/date are core local commands and must work regardless of
+            // optional skill switches left over from an earlier build.
+            OfflineKnowledge.answer(memoryText)?.let { return it }
             if (skills.enabled("home") && normalized in setOf(
                     "включи умный свет", "выключи умный свет", "включи домашний свет", "выключи домашний свет")) {
                 val on = normalized.startsWith("включи")
@@ -1105,11 +1161,30 @@ class MainActivity : Activity() {
             }
 
             if (
-                normalized == "новости" ||
-                normalized.contains("сводка новостей") ||
-                normalized.contains("последние новости") ||
-                normalized.contains("главные новости")
+                normalized == "погода" ||
+                normalized == "погода сейчас" ||
+                normalized == "погода сегодня" ||
+                normalized.contains("какая погода") ||
+                normalized.contains("что с погодой")
             ) {
+                if (hasApproximateLocation()) fetchWeatherAndSpeak()
+                else requestApproximateLocation(forWeather = true)
+                return "Получаю погоду по примерному местоположению…"
+            }
+
+            if (
+                normalized == "местные новости" ||
+                normalized == "новости рядом" ||
+                normalized.contains("новости по месту") ||
+                normalized.contains("новости в моем городе") ||
+                normalized.contains("новости в моём городе")
+            ) {
+                if (hasApproximateLocation()) fetchLocalNewsAndSpeak()
+                else requestApproximateLocation(forLocalNews = true)
+                return "Получаю местную новостную сводку…"
+            }
+
+            if (BackgroundInfoPolicy.classify(memoryText) == BackgroundInfoPolicy.Kind.MAIN_NEWS) {
                 fetchNewsAndSpeak()
                 memory.rememberTurn(memoryText, "Получаю свежую сводку новостей.")
                 return "Получаю свежую сводку новостей."
@@ -1141,6 +1216,19 @@ class MainActivity : Activity() {
         }
 
         @JavascriptInterface fun startListening() { runOnUiThread { this@MainActivity.startListening() } }
+        @JavascriptInterface fun hasApproximateLocation(): Boolean = this@MainActivity.hasApproximateLocation()
+        @JavascriptInterface fun requestApproximateLocation() {
+            this@MainActivity.requestApproximateLocation()
+        }
+        @JavascriptInterface fun requestWeather() {
+            if (this@MainActivity.hasApproximateLocation()) this@MainActivity.fetchWeatherAndSpeak()
+            else this@MainActivity.requestApproximateLocation(forWeather = true)
+        }
+        @JavascriptInterface fun requestLocalNews() {
+            if (this@MainActivity.hasApproximateLocation()) this@MainActivity.fetchLocalNewsAndSpeak()
+            else this@MainActivity.requestApproximateLocation(forLocalNews = true)
+        }
+        @JavascriptInterface fun requestNewsSummary() { this@MainActivity.fetchNewsAndSpeak() }
         @JavascriptInterface fun getInterruptByVoice(): Boolean = prefs.getBoolean("interrupt_voice", false)
         @JavascriptInterface fun setInterruptByVoice(enabled: Boolean) {
             prefs.edit().putBoolean("interrupt_voice", enabled).apply()
@@ -1407,6 +1495,7 @@ class MainActivity : Activity() {
         tts?.stop()
         tts?.shutdown()
         fishAudioTts.release()
+        localInfo.release()
         if (::webView.isInitialized) {
             webView.removeJavascriptInterface("AndroidJarvis")
             webView.destroy()

@@ -20,32 +20,41 @@ class PhoneCommandRouter(private val context: Context) {
     private val allowedApps = AllowedAppStore(context)
 
     fun canHandle(raw: String): Boolean {
-        val lower = raw.trim().lowercase(Locale("ru", "RU"))
+        val lower = normalizeCommand(raw)
         return lower == "открой браузер" || lower.contains("открой браузер") ||
             lower.contains("открой настройки") || lower.contains("открой wi-fi") || lower.contains("открой wifi") || lower.contains("открой вай фай") || lower.contains("открой bluetooth") || lower.contains("открой блютуз") || lower.contains("открой режим полета") || lower.contains("открой авиарежим") || lower.contains("открой камеру") ||
             lower.startsWith("найди в интернете") || lower.startsWith("позвони ") ||
             lower.contains("кто звонил") || lower.contains("пропущенные вызовы") ||
             lower.startsWith("открой ") ||
             lower.contains("включи фонарик") || lower.contains("выключи фонарик") ||
+            lower.contains("включи фонарь") || lower.contains("выключи фонарь") ||
+            lower.contains("зажги фонар") || lower.contains("погаси фонар") ||
             lower.contains("включи свет") || lower.contains("выключи свет") ||
-            lower.contains("увеличь громкость") || lower.contains("сделай громче") ||
-            lower.contains("уменьши громкость") || lower.contains("сделай тише") ||
+            lower.contains("увеличь громкость") || lower.contains("сделай громче") || lower.contains("громче") ||
+            lower.contains("уменьши громкость") || lower.contains("сделай тише") || lower.contains("тише") ||
             lower.contains("выключи звук") || lower.contains("включи звук") ||
+            lower.contains("убери звук") || lower.contains("верни звук") ||
             lower == "назад" || lower.contains("вернись назад") || lower.contains("вернуться назад") || lower.contains("перейди назад") ||
             lower == "вперед" || lower == "вперёд" || lower.contains("идти вперед") || lower.contains("идти вперёд") || lower.contains("перейди вперед") || lower.contains("перейди вперёд") ||
             lower == "домой" || lower == "главный экран" || lower.contains("на главный экран") || lower.contains("перейди домой") ||
             lower.contains("открой последние приложения") || lower.contains("покажи последние приложения") ||
-            lower == "включи музыку" || lower == "включи музыку яндекс" || lower == "открой яндекс музыку" ||
+            lower == "включи музыку" || lower == "продолжи музыку" ||
+            lower == "воспроизведи музыку" || lower == "играй музыку" ||
+            lower == "продолжай музыку" || lower == "возобнови музыку" ||
+            lower == "включи музыку яндекс" || lower == "открой яндекс музыку" ||
             lower.startsWith("включи песню ") || lower.startsWith("включи музыку ") ||
             lower == "стоп" || lower == "стоп музыка" || lower == "останови музыку" || lower == "пауза" ||
-            lower == "следующая песня" || lower == "следующий трек" || lower == "дальше" ||
-            lower == "предыдущая песня" || lower == "предыдущий трек" || lower == "назад песню" ||
+            lower == "поставь музыку на паузу" || lower == "останови воспроизведение" ||
+            lower == "следующая песня" || lower == "следующий трек" || lower == "следующая" ||
+            lower == "дальше" || lower == "переключи трек" || lower == "переключи песню" ||
+            lower == "предыдущая песня" || lower == "предыдущий трек" || lower == "предыдущая" ||
+            lower == "назад песню" || lower == "верни предыдущий трек" ||
             lower.contains("прочитай последнее сообщение в ватсап") || lower.contains("прочитай последнее сообщение whatsapp")
     }
 
     fun execute(raw: String): String {
-        val command = raw.trim()
-        val lower = command.lowercase(Locale("ru", "RU"))
+        val command = raw.trim().replace(Regex("[.!?,;:]+$"), "").trim()
+        val lower = normalizeCommand(command)
         return when {
             lower == "открой браузер" || lower.contains("открой браузер") -> openBrowser()
             lower.contains("открой wi-fi") || lower.contains("открой wifi") || lower.contains("открой вай фай") -> {
@@ -75,22 +84,32 @@ class PhoneCommandRouter(private val context: Context) {
             lower.startsWith("найди в интернете") -> searchWeb(command.drop(17).trim())
             lower.startsWith("позвони ") -> callContact(command.drop(8).trim())
             lower.contains("кто звонил") || lower.contains("пропущенные вызовы") -> missedCalls()
-            lower.contains("включи фонарик") || lower.contains("включи свет") -> setFlashlight(true)
-            lower.contains("выключи фонарик") || lower.contains("выключи свет") -> setFlashlight(false)
-            lower.contains("увеличь громкость") || lower.contains("сделай громче") -> changeVolume(true)
-            lower.contains("уменьши громкость") || lower.contains("сделай тише") -> changeVolume(false)
-            lower.contains("выключи звук") -> setMute(true)
-            lower.contains("включи звук") -> setMute(false)
+            lower.contains("включи фонарик") || lower.contains("включи фонарь") ||
+                lower.contains("зажги фонар") || lower.contains("включи свет") -> setFlashlight(true)
+            lower.contains("выключи фонарик") || lower.contains("выключи фонарь") ||
+                lower.contains("погаси фонар") || lower.contains("выключи свет") -> setFlashlight(false)
+            lower.contains("увеличь громкость") || lower.contains("сделай громче") || lower == "громче" -> changeVolume(true)
+            lower.contains("уменьши громкость") || lower.contains("сделай тише") || lower == "тише" -> changeVolume(false)
+            lower.contains("выключи звук") || lower.contains("убери звук") -> setMute(true)
+            lower.contains("включи звук") || lower.contains("верни звук") -> setMute(false)
             lower == "назад" || lower.contains("вернись назад") || lower.contains("вернуться назад") || lower.contains("перейди назад") -> goBack()
             lower == "вперед" || lower == "вперёд" || lower.contains("идти вперед") || lower.contains("идти вперёд") || lower.contains("перейди вперед") || lower.contains("перейди вперёд") -> goForward()
             lower == "домой" || lower == "главный экран" || lower.contains("на главный экран") || lower.contains("перейди домой") -> goHome()
             lower.contains("открой последние приложения") || lower.contains("покажи последние приложения") -> accessibilityAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_RECENTS, "Открываю последние приложения.")
-            lower == "включи музыку" || lower == "включи музыку яндекс" || lower == "открой яндекс музыку" -> openYandexMusic("")
+            lower == "включи музыку" || lower == "продолжи музыку" ||
+                lower == "воспроизведи музыку" || lower == "играй музыку" ||
+                lower == "продолжай музыку" || lower == "возобнови музыку" ->
+                if (context is Activity) openYandexMusic("") else musicControl("play")
+            lower == "включи музыку яндекс" || lower == "открой яндекс музыку" -> openYandexMusic("")
             lower.startsWith("включи песню ") -> playYandexSong(command.drop(13).trim())
             lower.startsWith("включи музыку ") -> playYandexSong(command.drop(14).trim())
-            lower == "стоп" || lower == "стоп музыка" || lower == "останови музыку" || lower == "пауза" -> musicControl("stop")
-            lower == "следующая песня" || lower == "следующий трек" || lower == "дальше" -> musicControl("next")
-            lower == "предыдущая песня" || lower == "предыдущий трек" || lower == "назад песню" -> musicControl("previous")
+            lower == "стоп" || lower == "стоп музыка" || lower == "останови музыку" ||
+                lower == "пауза" || lower == "поставь музыку на паузу" ||
+                lower == "останови воспроизведение" -> musicControl("stop")
+            lower == "следующая песня" || lower == "следующий трек" || lower == "следующая" ||
+                lower == "дальше" || lower == "переключи трек" || lower == "переключи песню" -> musicControl("next")
+            lower == "предыдущая песня" || lower == "предыдущий трек" || lower == "предыдущая" ||
+                lower == "назад песню" || lower == "верни предыдущий трек" -> musicControl("previous")
             lower.contains("прочитай последнее сообщение в ватсап") || lower.contains("прочитай последнее сообщение whatsapp") -> openWhatsAppForReading()
             lower.startsWith("открой ") -> openAllowedApp(command.drop(7).trim())
             else -> "Команда PHONE MODE пока не подключена: $command"
@@ -146,6 +165,7 @@ class PhoneCommandRouter(private val context: Context) {
 
     private fun musicControl(action: String): String {
         val keyCode = when (action) {
+            "play" -> KeyEvent.KEYCODE_MEDIA_PLAY
             "stop" -> KeyEvent.KEYCODE_MEDIA_PAUSE
             "next" -> KeyEvent.KEYCODE_MEDIA_NEXT
             else -> KeyEvent.KEYCODE_MEDIA_PREVIOUS
@@ -153,6 +173,7 @@ class PhoneCommandRouter(private val context: Context) {
 
         if (sendMediaKey(keyCode)) {
             return when (action) {
+                "play" -> "Продолжаю воспроизведение музыки."
                 "stop" -> "Музыка поставлена на паузу."
                 "next" -> "Переключаю на следующий трек."
                 else -> "Переключаю на предыдущий трек."
@@ -161,12 +182,14 @@ class PhoneCommandRouter(private val context: Context) {
 
         val service = JarvisAccessibilityService.instance
         val clicked = when (action) {
+            "play" -> service?.clickAnyText("Воспроизвести", "Продолжить", "Play", "▶") == true
             "stop" -> service?.clickAnyText("Пауза", "Pause", "Стоп", "Stop") == true
             "next" -> service?.clickAnyText("Следующий трек", "Следующая песня", "Дальше", "Next") == true
             else -> service?.clickAnyText("Предыдущий трек", "Предыдущая песня", "Назад", "Previous") == true
         }
         return if (clicked) {
             when (action) {
+                "play" -> "Продолжаю воспроизведение музыки."
                 "stop" -> "Музыка поставлена на паузу."
                 "next" -> "Переключаю на следующий трек."
                 else -> "Переключаю на предыдущий трек."
@@ -349,6 +372,10 @@ class PhoneCommandRouter(private val context: Context) {
             ActivityCompat.requestPermissions(activity, arrayOf(permission), 100)
         }
     }
+
+    private fun normalizeCommand(value: String): String =
+        value.trim().lowercase(Locale("ru", "RU")).replace('ё', 'е')
+            .replace(Regex("[.!?,;:]+$"), "").replace(Regex("\\s+"), " ").trim()
 
     private fun normalizeAppName(value: String): String =
         value.trim().lowercase(Locale("ru", "RU")).replace(Regex("[^a-zа-яё0-9]+"), " ").trim()

@@ -241,3 +241,26 @@ test('GigaChat disconnect never deletes local chat history automatically',()=>{
   context.document.getElementById('clearGigaHistory').onclick();
   assert.deepEqual(calls,['disconnect','history']);
 });
+
+test('weather and local news request only user-initiated approximate location access',()=>{
+  const {context,elements}=load();
+  const calls=[];
+  context.window.AndroidJarvis.hasApproximateLocation=()=>false;
+  context.window.AndroidJarvis.requestApproximateLocation=()=>calls.push('permission');
+  context.window.AndroidJarvis.requestWeather=()=>calls.push('weather');
+  context.window.AndroidJarvis.requestLocalNews=()=>calls.push('local-news');
+  context.window.AndroidJarvis.requestNewsSummary=()=>calls.push('news');
+  context.document.getElementById('allowLocation').onclick();
+  context.document.getElementById('weatherNow').onclick();
+  context.document.getElementById('localNewsNow').onclick();
+  context.document.getElementById('globalNewsNow').onclick();
+  assert.deepEqual(calls,['permission','weather','local-news','news']);
+  assert.match(context.document.getElementById('locationStatus').textContent,/Местоположение выключено/);
+});
+test('native location result is displayed without exposing coordinates in UI',()=>{
+  const {context,elements}=load();
+  context.window.onJarvisLocationStatus('granted','Примерное местоположение разрешено.');
+  assert.equal(elements.get('allowLocation').disabled,true);
+  context.window.onJarvisLocalInfo('weather','Погода по приблизительному местоположению — город. Сейчас 5 °C.');
+  assert.match(elements.get('message').textContent,/Сейчас 5/);
+});

@@ -4,7 +4,7 @@ const personas=[['J.A.R.V.I.S.','Координация и общий помощ
 const wakeWords=['джарвис','jarvis','астра','astra','луна','luna','сайбер','кибер','cyber','терра','terra'];
 const activationPersonas={'джарвис':'J.A.R.V.I.S.','jarvis':'J.A.R.V.I.S.','астра':'Astra','astra':'Astra','луна':'Luna','luna':'Luna','сайбер':'Cyber','кибер':'Cyber','cyber':'Cyber','терра':'Terra','terra':'Terra'};
 function showMessage(t){message.textContent=t||''}function activatePersona(word){const persona=activationPersonas[(word||'').toLowerCase()];if(!persona)return;state.persona=persona;localStorage.setItem('jarvisPersona',persona);window.AndroidJarvis?.setPersona?.(persona);showMessage('Активирован персонаж: '+persona)}function render(){modeButton.textContent=state.mode==='phone'?'📱 PHONE MODE':'🖥️ PC MODE';modeNav.textContent=state.mode==='phone'?'📱 Телефон':'🖥️ ПК';showMessage('Готов к работе, '+(localStorage.getItem('jarvisName')||'сэр')+'. Персонаж: '+state.persona)}
-function sendCommand(v){const text=(v||command.value).trim();if(!text)return;state.waitingForCommand=false;window.AndroidJarvis?.stopListening?.();showMessage('Выполняю: «'+text+'»');try{const r=window.AndroidJarvis?.command(text);if(r){showMessage(r);const asyncNative=/^(Получаю свежую сводку новостей|Читаю последнее сообщение WhatsApp|Открываю WhatsApp)/i.test(r);if(!asyncNative){window.AndroidJarvis?.speak(r)}}else showMessage('Обрабатываю запрос…')}catch(e){showMessage('Ошибка: '+e.message)}command.value=''}
+function sendCommand(v){const text=(v||command.value).trim();if(!text)return;state.waitingForCommand=false;window.AndroidJarvis?.stopListening?.();showMessage('Выполняю: «'+text+'»');try{const r=window.AndroidJarvis?.command(text);if(r){showMessage(r);const asyncNative=/^(Получаю свежую сводку новостей|Получаю местную новостную сводку|Получаю погоду по примерному местоположению|Запрашиваю доступ к местоположению|Читаю последнее сообщение WhatsApp|Открываю WhatsApp)/i.test(r);if(!asyncNative){window.AndroidJarvis?.speak(r)}}else showMessage('Обрабатываю запрос…')}catch(e){showMessage('Ошибка: '+e.message)}command.value=''}
 function onSpeechState(phase,text){state.waitingForCommand=['starting','listening','processing','permission'].includes(phase);$('micStatus').textContent=text||'';orbButton.setAttribute('aria-busy',state.waitingForCommand?'true':'false');if(phase==='listening')state.waitingForCommand=true;if(!state.waitingForCommand)$('micLevel').value=0;}
 window.onJarvisSpeechState=onSpeechState;window.onJarvisSpeechLevel=v=>{$('micLevel').value=Math.max(0,Math.min(100,(Number(v)+2)*8));};
 function startListening(){if(state.diagnosticActive){showMessage('Завершите проверку микрофона, затем нажмите на круг.');return}if(!window.AndroidJarvis?.startListening){showMessage('Голосовой ввод доступен в APK.');return}state.waitingForCommand=true;showMessage('Слушаю…');window.AndroidJarvis.startListening()}
@@ -248,4 +248,34 @@ $('skipRegistration').onclick=()=>{localStorage.setItem('jarvisOnboarded','1');$
   // Local renderer never treats saved credentials as a verified connection.
   refresh();
   settingsNav.addEventListener('click',refresh);
+})();
+
+/* Weather/local-news access is requested only after a user action. */
+(function initLocalInfoControls(){
+  const status=$('locationStatus'),allow=$('allowLocation'),weather=$('weatherNow'),
+    localNews=$('localNewsNow'),globalNews=$('globalNewsNow');
+  if(!status||!allow||!weather||!localNews||!globalNews)return;
+  const refresh=()=>{
+    const granted=!!window.AndroidJarvis?.hasApproximateLocation?.();
+    status.textContent=granted
+      ? 'Примерное местоположение разрешено. Точное местоположение и фоновый доступ не используются.'
+      : 'Местоположение выключено. Разрешение запрашивается только для погоды и местных новостей.';
+    allow.textContent=granted?'Примерное местоположение разрешено':'Разрешить примерное местоположение';
+    allow.disabled=granted;
+  };
+  window.onJarvisLocationStatus=(phase,text)=>{
+    status.textContent=text||'Статус местоположения обновлён.';
+    if(phase==='granted'){allow.disabled=true;allow.textContent='Примерное местоположение разрешено';}
+    else if(phase==='denied'){allow.disabled=false;allow.textContent='Разрешить примерное местоположение';}
+  };
+  window.onJarvisLocalInfo=(kind,text)=>{
+    status.textContent=text||'Готово.';
+    showMessage(text||'Готово.');
+  };
+  allow.onclick=()=>window.AndroidJarvis?.requestApproximateLocation?.();
+  weather.onclick=()=>window.AndroidJarvis?.requestWeather?.();
+  localNews.onclick=()=>window.AndroidJarvis?.requestLocalNews?.();
+  globalNews.onclick=()=>window.AndroidJarvis?.requestNewsSummary?.();
+  settingsNav.addEventListener('click',refresh);
+  refresh();
 })();
