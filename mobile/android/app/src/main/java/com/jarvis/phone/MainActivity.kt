@@ -198,6 +198,7 @@ class MainActivity : Activity() {
                 override fun shouldOverrideUrlLoading(view: WebView?, request: android.webkit.WebResourceRequest?): Boolean = true
                 override fun onPageFinished(view: WebView?, url: String?) {
                     pageReady = true
+                    voiceEvent("onJarvisPersonaChanged", selectedPersona)
                     deliverBackgroundCommand()
                     // At most one metadata request a day. Installation always
                     // requires a separate user tap and signature verification.
@@ -818,7 +819,8 @@ class MainActivity : Activity() {
         // Starts Variant A exactly when the engine begins playback, not while
         // a cloud audio file is still downloading / being prepared.
         voiceEvent("onJarvisSpeechState", "speaking",
-            "J.A.R.V.I.S. отвечает. Нажмите на круг, чтобы прервать.")
+            "$selectedPersona отвечает. Нажмите на голограмму, чтобы прервать.")
+        voiceEvent("onJarvisPersonaChanged", selectedPersona)
         voiceEvent("onJarvisSpeakState", "start", speechTextLength)
     }
 
