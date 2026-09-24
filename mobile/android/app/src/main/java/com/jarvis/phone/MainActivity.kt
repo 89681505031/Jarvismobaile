@@ -303,9 +303,11 @@ class MainActivity : Activity() {
             isFinishing || isDestroyed || !offlineWake.installed()) return
         if (android.os.Build.VERSION.SDK_INT >= 33 &&
             ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
-            setBackgroundWakeEnabled(false)
+            // Keep the user's saved preference. Permission may be temporarily
+            // revoked; showing an error must not silently turn the setting off.
+            voiceEvent("onJarvisBackgroundWakeChanged", backgroundWakeEnabled)
             voiceEvent("onJarvisBackgroundWakeStatus", "error",
-                "Для видимого выключателя фонового микрофона разрешите уведомления JARVIS.")
+                "Для фонового микрофона разрешите уведомления JARVIS.")
             return
         }
         if (WakeForegroundService.active != null) return
@@ -319,9 +321,11 @@ class MainActivity : Activity() {
             voiceEvent("onJarvisBackgroundWakeStatus", "ready",
                 "Фоновый режим готов. При сворачивании микрофон перейдёт в службу с постоянным уведомлением.")
         } catch (_: Exception) {
-            setBackgroundWakeEnabled(false)
+            // A transient OEM/Android service-start failure is operational state,
+            // not a user request to disable background listening.
+            voiceEvent("onJarvisBackgroundWakeChanged", backgroundWakeEnabled)
             voiceEvent("onJarvisBackgroundWakeStatus", "error",
-                "Android запретил запуск фонового режима. Откройте JARVIS и попробуйте снова.")
+                "Android временно не запустил фоновый режим. Настройка сохранена; откройте JARVIS и попробуйте снова.")
         }
     }
 
