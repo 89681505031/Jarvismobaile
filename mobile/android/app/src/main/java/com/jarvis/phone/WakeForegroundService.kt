@@ -18,6 +18,7 @@ import android.speech.tts.UtteranceProgressListener
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
 import java.util.Locale
+import java.util.concurrent.Executors
 
 /**
  * Opt-in microphone foreground service. It MUST be created by an Activity while
@@ -50,6 +51,10 @@ class WakeForegroundService : Service() {
     private lateinit var router: PhoneCommandRouter
     private var tts: TextToSpeech? = null
     private lateinit var fishAudioTts: FishAudioTts
+    private lateinit var gigaChat: GigaChatClient
+    private val newsFeed = JarvisNewsFeed()
+    private val infoExecutor = Executors.newSingleThreadExecutor()
+    private var cloudBusy = false
     private var ttsReady = false
     private var speaking = false
     private var suppressUntil = 0L
@@ -81,6 +86,7 @@ class WakeForegroundService : Service() {
         super.onCreate()
         router = PhoneCommandRouter(this)
         fishAudioTts = FishAudioTts(this)
+        gigaChat = GigaChatClient(this)
         offline = OfflineWakeEngine(
             this,
             onStatus = { status, message ->
@@ -192,7 +198,7 @@ class WakeForegroundService : Service() {
 
     private fun onWake(match: WakeWordMatcher.Activation) {
         if (shuttingDown || !shouldListenInBackground || !foreground) return
-        if (speaking || SystemClock.elapsedRealtime() < suppressUntil) return
+        if (cloudBusy || speaking || SystemClock.elapsedRealtime() < suppressUntil) return
         // A wake name is required before any background action.
         getSharedPreferences("jarvis_settings", MODE_PRIVATE).edit()
             .putString("persona", match.persona).apply()
@@ -217,7 +223,7 @@ class WakeForegroundService : Service() {
 
     private fun onFollowUp(phrase: String) {
         if (shuttingDown || !shouldListenInBackground || !foreground) return
-        if (speaking || SystemClock.elapsedRealtime() < suppressUntil) return
+        if (cloudBusy || speaking || SystemClock.elapsedRealtime() < suppressUntil) return
         if (armedUntil == 0L || SystemClock.elapsedRealtime() > armedUntil) {
             armedUntil = 0L
             return
@@ -227,6 +233,23 @@ class WakeForegroundService : Service() {
     }
 
     private fun executeBackgroundCommand(phrase: String) {
+        when (BackgroundInfoPolicy.classify(phrase)) {
+            BackgroundInfoPolicy.Kind.TIME,
+            BackgroundInfoPolicy.Kind.DATE -> {
+                val response = OfflineKnowledge.answer(phrase)
+                    ?: "Не удалось определить время или дату."
+                notificationText = response
+                updateNotification()
+                speak(response)
+                return
+            }
+            BackgroundInfoPolicy.Kind.MAIN_NEWS -> {
+                fetchBackgroundNews()
+                return
+            }
+            null -> Unit
+        }
+
         if (BackgroundCommandPolicy.permitted(phrase)) {
             val response = try { router.execute(phrase) } catch (_: Exception) {
                 "Не удалось выполнить команду. Откройте JARVIS."
@@ -241,6 +264,40 @@ class WakeForegroundService : Service() {
             notificationText = "Нажмите на уведомление, чтобы продолжить команду в JARVIS"
             updateNotification()
             speak("Для этой команды откройте Джарвис через уведомление.")
+        }
+    }
+
+    private fun fetchBackgroundNews() {
+        if (cloudBusy || shuttingDown) return
+        cloudBusy = true
+        pendingCommand = null
+        notificationText = "Получаю главную сводку новостей…"
+        updateNotification()
+        speak("Получаю главные новости")
+
+        val persona = getSharedPreferences("jarvis_settings", MODE_PRIVATE)
+            .getString("persona", "J.A.R.V.I.S.").orEmpty()
+
+        infoExecutor.execute {
+            val summary = try {
+                val items = newsFeed.fetchMainHeadlines()
+                val prompt = "Сделай короткую нейтральную голосовую сводку главных свежих новостей. " +
+                    "Используй только эти заголовки, не придумывай детали. Назови 4-6 тем: " +
+                    items.joinToString(" | ")
+                val response = gigaChat.askConversation(prompt, persona)
+                if (response.success) response.text
+                else "Главные свежие новости: " + items.take(5).joinToString(". ")
+            } catch (_: Exception) {
+                "Не удалось получить главные новости. Проверьте интернет и повторите."
+            }
+
+            ui.post {
+                if (shuttingDown) return@post
+                cloudBusy = false
+                notificationText = summary.take(220)
+                updateNotification()
+                speak(summary)
+            }
         }
     }
 
@@ -368,6 +425,7 @@ class WakeForegroundService : Service() {
         armedUntil = 0L
         ui.removeCallbacksAndMessages(null)
         try { offline.release() } catch (_: Exception) {}
+        try { infoExecutor.shutdownNow() } catch (_: Exception) {}
         try { fishAudioTts.release() } catch (_: Exception) {}
         try { tts?.stop(); tts?.shutdown() } catch (_: Exception) {}
         active = null
