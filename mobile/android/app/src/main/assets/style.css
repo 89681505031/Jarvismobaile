@@ -74,3 +74,75 @@ select{background:#05080c;border:1px solid #243746;color:#e8f1ff;border-radius:1
 @keyframes introCoreMorph{0%{width:20px;height:20px;border-radius:999px}45%{width:28px;height:28px;border-radius:14px}100%{width:18px;height:18px;border-radius:999px}}
 @keyframes introBlobFloat{0%,100%{transform:scale(1) rotate(-8deg)}50%{transform:scale(1.06) rotate(10deg)}}
 @media(max-width:420px){.intro-shell{min-height:calc(100vh - 36px);border-radius:28px}.birth-grid{grid-template-columns:1fr 1fr 1fr}}
+
+
+/* Reference-style activation overlay. It deliberately sits above an existing
+ * profile so users upgrading in place still see the new first-launch sequence. */
+.activation-overlay{
+  position:fixed;inset:0;z-index:99999;background:#fff;color:#101010;
+  display:grid;place-items:center;overflow:hidden;opacity:1;
+  transition:opacity .55s ease,visibility .55s ease;
+}
+.activation-overlay[hidden]{display:none!important}
+.activation-orbit{
+  position:absolute;left:50%;top:50%;width:170px;height:170px;
+  transform:translate(-50%,-50%);transition:opacity .45s ease,transform .6s cubic-bezier(.2,.8,.2,1);
+}
+.activation-core{
+  --activation-progress:0;
+  position:absolute;left:50%;top:50%;width:42px;height:42px;border-radius:50%;
+  transform:translate(-50%,-50%) scale(.9);display:grid;place-items:center;
+  background:#111;color:#fff;box-shadow:0 8px 22px rgba(0,0,0,.12);
+  transition:transform .35s ease;
+}
+.activation-core::after{
+  content:"";position:absolute;inset:-5px;border-radius:50%;
+  border:1px solid rgba(0,0,0,calc(.05 + var(--activation-progress)*.10));
+  transform:scale(calc(.82 + var(--activation-progress)*.24));
+}
+.activation-core b{font:600 8px/1 system-ui,-apple-system,sans-serif;letter-spacing:-.02em}
+.activation-dot{position:absolute;width:9px;height:9px;border-radius:50%;background:#111}
+.activation-dot--a{left:50%;top:50%;animation:activationOrbitA 2.2s linear infinite}
+.activation-dot--b{left:50%;top:50%;width:6px;height:6px;animation:activationOrbitB 2.85s linear infinite}
+.activation-dot--c{left:50%;top:50%;width:4px;height:4px;animation:activationOrbitC 3.4s linear infinite}
+.activation-running .activation-core{animation:activationCoreBeat .72s ease-in-out infinite}
+.activation-complete .activation-orbit{transform:translate(-50%,-50%) scale(.9)}
+.activation-blob{
+  position:absolute;left:50%;top:50%;width:112px;height:112px;
+  transform:translate(-50%,-50%) scale(.1) rotate(-14deg);
+  opacity:0;perspective:450px;transform-style:preserve-3d;
+  transition:opacity .55s ease,transform .75s cubic-bezier(.16,.9,.18,1);
+}
+.activation-blob::before{
+  content:"";position:absolute;inset:20%;
+  background:radial-gradient(circle at 38% 28%,#9bb7ff 0,#536df7 34%,#2e3fe5 65%,#2534c9 100%);
+  border-radius:48% 52% 45% 55%/42% 45% 55% 58%;
+  filter:blur(.2px);box-shadow:0 16px 34px rgba(51,72,224,.25);
+}
+.activation-blob i{
+  position:absolute;left:10%;right:10%;height:20px;border-radius:50%;
+  background:linear-gradient(90deg,#9ab6ff 0,#6d86ff 18%,#4258ef 48%,#718aff 77%,#9ab6ff 100%);
+  filter:saturate(1.1);box-shadow:0 5px 16px rgba(48,67,215,.12);
+  transform-style:preserve-3d;
+}
+.activation-blob i:nth-child(1){top:18%;transform:rotateZ(-12deg) rotateX(66deg) translateZ(18px)}
+.activation-blob i:nth-child(2){top:29%;transform:rotateZ(14deg) rotateX(63deg) translateZ(12px)}
+.activation-blob i:nth-child(3){top:40%;transform:rotateZ(-8deg) rotateX(67deg) translateZ(7px)}
+.activation-blob i:nth-child(4){top:51%;transform:rotateZ(10deg) rotateX(64deg) translateZ(2px)}
+.activation-blob i:nth-child(5){top:62%;transform:rotateZ(-14deg) rotateX(66deg) translateZ(-5px)}
+.activation-blob i:nth-child(6){top:73%;transform:rotateZ(7deg) rotateX(65deg) translateZ(-10px)}
+.activation-wordmark{
+  position:absolute;left:50%;top:calc(50% + 84px);transform:translate(-50%,12px);
+  opacity:0;color:#111;font:500 19px/1.1 system-ui,-apple-system,sans-serif;
+  letter-spacing:-.035em;transition:opacity .45s ease,transform .45s ease;
+}
+.activation-blob-phase .activation-orbit{opacity:0;transform:translate(-50%,-50%) scale(.55)}
+.activation-blob-phase .activation-blob{opacity:1;transform:translate(-50%,-50%) scale(1) rotate(-5deg);animation:activationBlobTurn 2.6s ease-in-out infinite}
+.activation-logo-phase .activation-wordmark{opacity:1;transform:translate(-50%,0)}
+.activation-exit{opacity:0;pointer-events:none}
+body.activation-active{overflow:hidden}
+@keyframes activationOrbitA{from{transform:translate(-50%,-50%) rotate(0deg) translateY(-34px)}to{transform:translate(-50%,-50%) rotate(360deg) translateY(-34px)}}
+@keyframes activationOrbitB{from{transform:translate(-50%,-50%) rotate(115deg) translateY(-52px)}to{transform:translate(-50%,-50%) rotate(475deg) translateY(-52px)}}
+@keyframes activationOrbitC{from{transform:translate(-50%,-50%) rotate(220deg) translateY(-67px)}to{transform:translate(-50%,-50%) rotate(580deg) translateY(-67px)}}
+@keyframes activationCoreBeat{0%,100%{transform:translate(-50%,-50%) scale(.94)}50%{transform:translate(-50%,-50%) scale(1.02)}}
+@keyframes activationBlobTurn{0%,100%{transform:translate(-50%,-50%) scale(1) rotate(-6deg) rotateY(-8deg)}50%{transform:translate(-50%,-50%) scale(1.06) rotate(7deg) rotateY(12deg)}}
