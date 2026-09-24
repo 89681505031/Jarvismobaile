@@ -153,7 +153,7 @@ class WakeForegroundService : Service() {
                     }
                     "listening" -> {
                         micStartAttempt = 0
-                        notificationText = "Тихая активация: Джарвис, Астра, Луна, Терра, Сайбер"
+                        notificationText = "Тихая активация: Джарвис, Астра, Луна, Терра, Кибер"
                         updateNotification()
                     }
                 }
