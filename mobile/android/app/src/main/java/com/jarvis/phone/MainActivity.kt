@@ -775,13 +775,10 @@ class MainActivity : Activity() {
         backgroundExecutor.execute {
             val finalText = try {
                 val items = newsFeed.fetchMainHeadlines()
-                val prompt = "Сделай краткую нейтральную голосовую сводку свежих новостей на русском языке. " +
-                    "Назови 5-6 главных тем по заголовкам ниже, по 1-2 предложения на тему. " +
-                    "Не придумывай факты и явно отделяй заголовок от неподтвержденных деталей. Заголовки: " +
-                    items.joinToString(" | ")
+                val prompt = JarvisNewsSummary.prompt(items)
                 val response = gigaChat.askConversation(prompt, selectedPersona)
-                if (response.success) response.text
-                else "Свежие новости по заголовкам: " + items.take(5).joinToString(". ")
+                if (response.success && JarvisNewsSummary.usableModelSummary(response.text)) response.text
+                else JarvisNewsSummary.fallback(items)
             } catch (_: Exception) {
                 "Не удалось получить свежие новости. Проверьте интернет и повторите запрос."
             }
@@ -850,13 +847,10 @@ class MainActivity : Activity() {
                     if (headlines.isEmpty()) {
                         "Не нашёл свежих местных заголовков для ${place.label}."
                     } else {
-                        val prompt = "Сделай короткую нейтральную голосовую сводку местных новостей для " +
-                            place.label + ". Используй только заголовки ниже, не придумывай детали. " +
-                            "Назови 4–6 важных тем. Заголовки: " + headlines.joinToString(" | ")
+                        val prompt = JarvisNewsSummary.prompt(headlines, place.label)
                         val response = gigaChat.askConversation(prompt, selectedPersona)
-                        if (response.success) response.text
-                        else "Свежие местные заголовки для ${place.label}: " +
-                            headlines.take(5).joinToString(". ")
+                        if (response.success && JarvisNewsSummary.usableModelSummary(response.text)) response.text
+                        else JarvisNewsSummary.fallback(headlines, place.label)
                     }
                 },
                 onFailure = {
