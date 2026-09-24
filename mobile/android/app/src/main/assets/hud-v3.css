@@ -498,3 +498,125 @@ body::after{
 @media(prefers-reduced-motion:reduce){
   .hud-brain-symbol{animation:none}
 }
+
+
+/* HUD v4 — living persona hologram inside the existing reactor rings. */
+.holo-avatar{
+  position:absolute;
+  inset:13.5%;
+  z-index:3;
+  border-radius:50%;
+  overflow:visible;
+  pointer-events:none;
+  --mouth-open:0;
+  --holo-mouth-scale:1;
+  --voice-lift:0px;
+  --voice-scale:1;
+  filter:drop-shadow(0 0 12px rgba(76,213,255,.42));
+}
+.holo-motion{
+  position:absolute;
+  inset:0;
+  border-radius:50%;
+  overflow:hidden;
+  transform-origin:50% 72%;
+  animation:holoNaturalIdle 6.4s ease-in-out infinite;
+  will-change:transform;
+  -webkit-mask-image:radial-gradient(circle at 50% 48%,#000 0 68%,rgba(0,0,0,.96) 76%,transparent 100%);
+  mask-image:radial-gradient(circle at 50% 48%,#000 0 68%,rgba(0,0,0,.96) 76%,transparent 100%);
+}
+.holo-face,.holo-mouth-layer img{
+  position:absolute;
+  inset:0;
+  width:100%;height:100%;
+  object-fit:cover;
+  object-position:center;
+  user-select:none;
+  -webkit-user-drag:none;
+}
+.holo-face{
+  opacity:.96;
+  filter:saturate(1.28) contrast(1.12) brightness(1.08);
+}
+.holo-mouth-layer{
+  position:absolute;
+  inset:0;
+  z-index:4;
+  overflow:hidden;
+  clip-path:inset(57% 30% 27% 30% round 28%);
+  transform-origin:50% 64%;
+  transform:scaleY(var(--holo-mouth-scale));
+  will-change:transform;
+  filter:brightness(1.08) drop-shadow(0 0 2px rgba(117,235,255,.55));
+}
+.holo-mouth-layer img{
+  filter:saturate(1.28) contrast(1.13) brightness(1.08);
+}
+.holo-lid{
+  position:absolute;
+  z-index:6;
+  top:43.2%;
+  width:15.5%;
+  height:1.4%;
+  border-radius:50%;
+  background:linear-gradient(180deg,rgba(1,19,33,.88),rgba(55,202,250,.58));
+  opacity:0;
+  transform:scaleY(.25);
+  transform-origin:center;
+  transition:opacity 42ms linear,transform 58ms ease;
+  box-shadow:0 0 3px rgba(75,220,255,.55)!important;
+}
+.holo-lid--left{left:27.8%;transform:rotate(2deg) scaleY(.25)}
+.holo-lid--right{right:27.8%;transform:rotate(-2deg) scaleY(.25)}
+.holo-avatar.is-blinking .holo-lid{opacity:.9}
+.holo-avatar.is-blinking .holo-lid--left{transform:rotate(2deg) scaleY(3.6)}
+.holo-avatar.is-blinking .holo-lid--right{transform:rotate(-2deg) scaleY(3.6)}
+.holo-scan{
+  position:absolute;
+  inset:-15% 0;
+  z-index:7;
+  opacity:.22;
+  background:
+    repeating-linear-gradient(180deg,transparent 0 3px,rgba(118,229,255,.15) 3px 4px),
+    linear-gradient(180deg,transparent 0 42%,rgba(93,223,255,.3) 49%,transparent 56% 100%);
+  background-size:100% 100%,100% 190%;
+  animation:holoScan 4.8s linear infinite;
+  mix-blend-mode:screen;
+}
+.holo-persona-name{
+  position:absolute;
+  z-index:9;
+  top:8%;
+  right:-2%;
+  min-width:86px;
+  text-align:right;
+  color:#92eaff;
+  font-size:clamp(9px,2.8vw,12px);
+  letter-spacing:.11em;
+  text-shadow:0 0 8px rgba(64,202,255,.65);
+  opacity:.88;
+}
+#jarvisOrb[data-mode="listening"] .holo-avatar{
+  filter:drop-shadow(0 0 var(--hud-listen-glow) rgba(62,214,255,.7));
+}
+#jarvisOrb[data-mode="speaking"] .holo-avatar{
+  filter:drop-shadow(0 0 var(--hud-speak-glow) rgba(100,229,255,.82));
+}
+#jarvisOrb[data-mode="speaking"] .holo-face{
+  filter:saturate(1.36) contrast(1.14) brightness(1.12);
+}
+#jarvisOrb[data-mode="thinking"] .holo-avatar{opacity:.86}
+@keyframes holoNaturalIdle{
+  0%,100%{transform:translate3d(-.3px,calc(1px - var(--voice-lift)),0) rotate(-.32deg) scale(var(--voice-scale))}
+  24%{transform:translate3d(.8px,calc(-1.4px - var(--voice-lift)),0) rotate(.18deg) scale(var(--voice-scale))}
+  53%{transform:translate3d(-.6px,calc(-.2px - var(--voice-lift)),0) rotate(.34deg) scale(var(--voice-scale))}
+  76%{transform:translate3d(.5px,calc(1.2px - var(--voice-lift)),0) rotate(-.12deg) scale(var(--voice-scale))}
+}
+@keyframes holoScan{
+  from{background-position:0 0,0 -100%}
+  to{background-position:0 0,0 100%}
+}
+@media(prefers-reduced-motion:reduce){
+  .holo-motion,.holo-scan{animation:none!important}
+  .holo-lid{transition:none!important}
+}
