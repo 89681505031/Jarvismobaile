@@ -31,11 +31,11 @@
     'Кибер':'holograms/kiber.webp'
   };
   const personaPalettes={
-    'J.A.R.V.I.S.':[132,214,255],
-    'Astra':[174,167,255],
-    'Luna':[135,196,255],
-    'Terra':[124,221,255],
-    'Кибер':[109,183,255]
+    'J.A.R.V.I.S.':[154,150,255],
+    'Astra':[184,148,255],
+    'Luna':[132,178,255],
+    'Terra':[126,205,255],
+    'Кибер':[112,164,255]
   };
 
   const waveCtx=waveCanvas&&typeof waveCanvas.getContext==='function'?waveCanvas.getContext('2d'):null;
@@ -214,8 +214,8 @@
     // A faint violet core gives the same floating-volume feeling as the reference.
     const glow=meshCtx.createRadialGradient?.(w*.5,h*.52,8,w*.5,h*.52,w*.34);
     if(glow){
-      glow.addColorStop(0,'rgba(94,84,255,.10)');
-      glow.addColorStop(.55,'rgba(95,124,255,.035)');
+      glow.addColorStop(0,'rgba(116,82,255,.13)');
+      glow.addColorStop(.55,'rgba(112,104,255,.045)');
       glow.addColorStop(1,'rgba(40,80,255,0)');
       meshCtx.fillStyle=glow;
       meshCtx.fillRect(0,0,w,h);
