@@ -23,6 +23,7 @@ class GigaChatBrainPolicyTest {
         assertTrue(jarvis.contains("[JARVIS_FRESH_HEADLINES]"))
         assertTrue(jarvis.lowercase().contains("не говори, что у тебя нет доступа к актуальной информации"))
         assertTrue(GigaChatBrainPolicy.systemPrompt("Cyber").contains("безопасность"))
+        assertTrue(GigaChatBrainPolicy.systemPrompt("Кибер").contains("Кибер"))
         assertTrue(GigaChatBrainPolicy.systemPrompt("Luna").contains("аналитична"))
     }
 
