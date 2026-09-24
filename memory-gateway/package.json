@@ -1,0 +1,1 @@
+{"private":true,"type":"module","dependencies":{"@redis-iris/agent-memory":"^0.3.1"},"scripts":{"test":"node --test"},"engines":{"node":"22.x"}}

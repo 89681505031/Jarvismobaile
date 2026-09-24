@@ -1,0 +1,36 @@
+*{box-sizing:border-box}
+html,body{margin:0;min-height:100%;background:#05070a;color:#e8f1ff;font-family:Arial,sans-serif;touch-action:manipulation}
+body{min-height:100vh;-webkit-tap-highlight-color:transparent}
+button,input{font:inherit}button{cursor:pointer}
+.app{min-height:100vh;display:flex;flex-direction:column;max-width:720px;margin:auto;padding:18px 16px 118px}
+.topbar{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}
+.brand{font-size:24px;font-weight:700;letter-spacing:4px}.status{margin-top:5px;font-size:12px;color:#7fd8ff;letter-spacing:1px}
+.mode{border:1px solid #28485d;background:#0b1118;color:#9fe4ff;border-radius:14px;padding:14px 16px;font-weight:700;min-height:52px}
+.orb-wrap{display:grid;place-items:center;flex:1;min-height:300px}
+.orb{width:170px;height:170px;border-radius:50%;border:1px solid #47718b;display:grid;place-items:center;box-shadow:0 0 35px #17374b,inset 0 0 35px #102432}
+.orb span{width:72px;height:72px;border-radius:50%;border:2px solid #8be2ff;box-shadow:0 0 25px #45cfff}
+.panel,.apps-panel{background:#0a0f15;border:1px solid #1d2c38;border-radius:18px;padding:16px}
+.message{min-height:54px;display:flex;align-items:center;color:#b8c9d6;margin-bottom:12px;font-size:16px}
+.input-row{display:flex;gap:10px}.input-row input{min-width:0;flex:1;background:#05080c;border:1px solid #243746;border-radius:14px;padding:15px;color:#fff;outline:none;font-size:16px;min-height:54px}
+.input-row button,.apps-action{border:1px solid #28485d;background:#0b1118;color:#9fe4ff;border-radius:14px}
+.input-row button{width:58px;min-height:54px;font-size:24px}.apps-panel{margin-top:10px}
+.apps-title{font-weight:700;margin-bottom:12px;font-size:17px}.apps-list{max-height:300px;overflow:auto}
+.app-row{display:flex;justify-content:space-between;align-items:center;padding:14px 4px;border-bottom:1px solid #16232d;color:#d8e6ef;min-height:54px}
+.app-row input{width:24px;height:24px}.app-empty{padding:14px;color:#8093a0}
+.apps-action{width:100%;padding:14px;margin-top:10px;min-height:52px;font-weight:700}
+.commands-list{display:flex;flex-direction:column;gap:8px}.command-item{display:flex;flex-direction:column;gap:5px;padding:13px;border:1px solid #172733;border-radius:12px;background:#070c11}
+.command-item b{color:#9fe4ff;font-size:15px}.command-item span{color:#8295a3;font-size:13px}
+.api-field{display:flex;flex-direction:column;gap:7px;margin:11px 0}.api-field label{font-size:13px;color:#8093a0}
+.api-field input{width:100%;background:#05080c;border:1px solid #243746;border-radius:14px;padding:13px;color:#fff;outline:none;min-height:52px}
+.bottom-nav{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:min(720px,100%);display:grid;grid-template-columns:repeat(4,1fr);gap:6px;padding:9px 8px calc(9px + env(safe-area-inset-bottom));background:#070a0ef5;border-top:1px solid #17232c;backdrop-filter:blur(10px);z-index:50}
+.bottom-nav button{border:1px solid #1a2a35;background:#0a1118;color:#9aaab5;border-radius:13px;padding:11px 5px;min-height:58px;font-size:12px;font-weight:700}
+.bottom-nav button.active{color:#9fe4ff}.touch-button{user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}.touch-button:active{transform:scale(.97)}
+@media(max-width:420px){.brand{font-size:20px}.mode{font-size:11px}.orb-wrap{min-height:260px}.orb{width:145px;height:145px}.bottom-nav button{font-size:11px;padding-left:2px;padding-right:2px}}
+.window-panel{position:fixed;top:12px;left:50%;transform:translateX(-50%);width:min(680px,calc(100% - 24px));max-height:calc(100vh - 110px);overflow:auto;z-index:60;box-shadow:0 20px 60px rgba(0,0,0,.65)}
+.apps-search{width:100%;background:#05080c;border:1px solid #243746;border-radius:14px;padding:13px;color:#fff;outline:none;min-height:52px;margin-bottom:10px}
+#registration{position:fixed;inset:0;z-index:1000;display:flex;align-items:center;justify-content:center;padding:22px;background:radial-gradient(circle at top,#12354a 0%,#05070a 58%)}
+#registration[hidden]{display:none!important}
+#registration .registration-card{width:min(480px,100%);padding:28px 22px;border:1px solid #31566b;border-radius:26px;background:linear-gradient(145deg,#101d29,#070b11);box-shadow:0 24px 90px rgba(0,0,0,.8)}
+#registration h1{margin:0 0 10px;text-align:center;color:#9fe4ff;letter-spacing:2px;font-size:25px}#registration p{text-align:center;color:#8da7b8;margin:0 0 24px;line-height:1.5}
+#registration input{display:block;width:100%;margin:10px 0;padding:15px;border-radius:13px;border:1px solid #29495b;background:#05080c;color:#fff;min-height:52px}
+#saveProfile{width:100%;margin-top:14px;padding:16px;border:1px solid #6bc9ef;border-radius:14px;background:#12384c;color:#c9f2ff;font-weight:700;min-height:54px}

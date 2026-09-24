@@ -1,0 +1,92 @@
+name: Build Jarvis Android APK
+
+on:
+  workflow_dispatch:
+  workflow_call:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify memory gateway
+        working-directory: memory-gateway
+        run: npm ci && npm test
+      - name: Verify voice interface
+        run: node --test tests/voice-ui.test.cjs
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+      - name: Restore stable debug signing key
+        env:
+          JARVIS_DEBUG_KEYSTORE_B64: ${{ secrets.JARVIS_DEBUG_KEYSTORE_B64 }}
+        run: |
+          if [ -n "$JARVIS_DEBUG_KEYSTORE_B64" ]; then
+            mkdir -p ~/.android
+            printf '%s' "$JARVIS_DEBUG_KEYSTORE_B64" | base64 --decode > ~/.android/debug.keystore
+            chmod 600 ~/.android/debug.keystore
+            echo "Using persistent Jarvis debug signing key"
+          else
+            echo "::warning::JARVIS_DEBUG_KEYSTORE_B64 is not configured; APK signature may change between runners."
+          fi
+      - name: Set APK version from source history
+        env:
+          SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          # Manual and PR workflows have independent run numbers. Derive the
+          # package version from the *source* commit, not the workflow run.
+          COUNT=$(git rev-list --count "$SOURCE_SHA")
+          test "$COUNT" -gt 0
+          echo "JARVIS_VERSION_CODE=$((100000 + COUNT))" >> "$GITHUB_ENV"
+          echo "JARVIS_VERSION_NAME=0.4.$COUNT" >> "$GITHUB_ENV"
+          echo "Source commit: $SOURCE_SHA | Android versionCode: $((100000 + COUNT))" >> "$GITHUB_STEP_SUMMARY"
+      - name: Build debug APK
+        working-directory: mobile/android
+        run: gradle --no-daemon testDebugUnitTest lintDebug assembleDebug
+      - name: Upload test and lint reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-verification-reports
+          path: mobile/android/app/build/reports/
+          if-no-files-found: ignore
+      - name: Verify persistent APK signing
+        env:
+          JARVIS_DEBUG_KEYSTORE_B64: ${{ secrets.JARVIS_DEBUG_KEYSTORE_B64 }}
+        run: |
+          if [ -n "$JARVIS_DEBUG_KEYSTORE_B64" ]; then
+            keytool -printcert -jarfile jarvis-phone-microphone-fixed.apk | grep -E 'Owner:|SHA256:' || true
+          else
+            echo "::warning::Persistent signing is not configured. Do not treat this APK as the update baseline."
+          fi
+      - name: Preserve standard APK
+        run: cp mobile/android/app/build/outputs/apk/debug/app-debug.apk jarvis-phone-microphone-fixed.apk
+      - name: Build side-by-side wake APK
+        working-directory: mobile/android
+        env:
+          JARVIS_DIAGNOSTIC: "1"
+        run: gradle --no-daemon assembleDebug
+      - name: Preserve diagnostic APK
+        run: cp mobile/android/app/build/outputs/apk/debug/app-debug.apk jarvis-phone-wake.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: jarvis-phone-microphone-fixed
+          path: jarvis-phone-microphone-fixed.apk
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        with:
+          name: jarvis-phone-wake
+          path: jarvis-phone-wake.apk
+          if-no-files-found: error
