@@ -4,6 +4,7 @@ import android.Manifest
 import android.app.Activity
 import android.content.Intent
 import android.graphics.Bitmap
+import android.media.AudioFormat
 import android.net.Uri
 import android.provider.MediaStore
 import android.provider.Settings
@@ -11,6 +12,7 @@ import android.content.pm.PackageManager
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import android.speech.RecognizerIntent
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
@@ -29,6 +31,7 @@ import java.util.Locale
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicBoolean
+import kotlin.math.sqrt
 
 class MainActivity : Activity() {
 
@@ -82,6 +85,8 @@ class MainActivity : Activity() {
     private var speechPlaybackStarted = false
     private var speechTextLength = 0
     private var resumeListeningAfterSpeech = false
+    @Volatile private var ttsAudioEncoding = AudioFormat.ENCODING_PCM_16BIT
+    @Volatile private var lastVoiceAmplitudeAt = 0L
     @Volatile private var activityResumed = false
     private val prefs by lazy { getSharedPreferences("jarvis_settings", MODE_PRIVATE) }
     private val backgroundExecutor = Executors.newSingleThreadExecutor()
@@ -103,7 +108,8 @@ class MainActivity : Activity() {
             }
         }
         interruptByVoice = prefs.getBoolean("interrupt_voice", false)
-        selectedPersona = prefs.getString("persona", "J.A.R.V.I.S.") ?: "J.A.R.V.I.S."
+        selectedPersona = canonicalPersona(prefs.getString("persona", "J.A.R.V.I.S.") ?: "J.A.R.V.I.S.")
+        prefs.edit().putString("persona", selectedPersona).apply()
         wakeModeEnabled = prefs.getBoolean("wake_mode", false)
         backgroundWakeEnabled = prefs.getBoolean("background_wake", false)
         pendingBackgroundCommand = intent?.takeIf { it.action == WakeForegroundService.ACTION_OPEN_COMMAND }
@@ -120,6 +126,19 @@ class MainActivity : Activity() {
                     override fun onStart(utteranceId: String?) {
                         val id = utteranceId?.substringAfterLast("-")?.toLongOrNull()
                         if (id != null) runOnUiThread { speechPlaybackBegan(id) }
+                    }
+                    override fun onBeginSynthesis(
+                        utteranceId: String?,
+                        sampleRateInHz: Int,
+                        audioFormat: Int,
+                        channelCount: Int
+                    ) {
+                        ttsAudioEncoding = audioFormat
+                    }
+                    override fun onAudioAvailable(utteranceId: String?, audio: ByteArray?) {
+                        val id = utteranceId?.substringAfterLast("-")?.toLongOrNull() ?: return
+                        if (id != speechGeneration || audio.isNullOrEmpty()) return
+                        emitVoiceAmplitude(pcmAmplitude(audio, ttsAudioEncoding))
                     }
                     override fun onDone(utteranceId: String?) { utteranceId?.substringAfterLast("-")?.toLongOrNull()?.let { finishSpeech(it) } }
                     override fun onError(utteranceId: String?) { utteranceId?.substringAfterLast("-")?.toLongOrNull()?.let { finishSpeech(it) } }
@@ -151,9 +170,9 @@ class MainActivity : Activity() {
                 } else {
                     offlineWake.stop()
                     wakeSessionActive = false
-                    selectedPersona = activation.persona
-                    prefs.edit().putString("persona", activation.persona).apply()
-                    voiceEvent("onJarvisWakeDetected", activation.persona, activation.command)
+                    selectedPersona = canonicalPersona(activation.persona)
+                    prefs.edit().putString("persona", selectedPersona).apply()
+                    voiceEvent("onJarvisWakeDetected", selectedPersona, activation.command)
                     if (activation.command.isBlank()) speak("Слушаю", resumeAfterSpeech = true)
                 }
             },
@@ -744,6 +763,48 @@ class MainActivity : Activity() {
         super.onPause()
     }
 
+    private fun canonicalPersona(name: String): String = when (name.trim().lowercase(Locale("ru", "RU"))) {
+        "cyber", "сайбер", "кибер" -> "Кибер"
+        "astra", "астра" -> "Astra"
+        "luna", "луна" -> "Luna"
+        "terra", "терра" -> "Terra"
+        "jarvis", "j.a.r.v.i.s", "j.a.r.v.i.s.", "джарвис" -> "J.A.R.V.I.S."
+        else -> name.trim().ifBlank { "J.A.R.V.I.S." }
+    }
+
+    private fun emitVoiceAmplitude(level: Float) {
+        if (!activityResumed || !isSpeaking) return
+        val now = SystemClock.elapsedRealtime()
+        if (level > 0f && now - lastVoiceAmplitudeAt < 32L) return
+        lastVoiceAmplitudeAt = now
+        voiceEvent("onJarvisVoiceAmplitude", level.coerceIn(0f, 1f))
+    }
+
+    private fun pcmAmplitude(audio: ByteArray, encoding: Int): Float {
+        if (audio.isEmpty()) return 0f
+        var sum = 0.0
+        var count = 0
+        if (encoding == AudioFormat.ENCODING_PCM_8BIT) {
+            for (b in audio) {
+                val sample = (b.toInt() and 0xff) - 128
+                sum += sample * sample
+                count++
+            }
+            return (sqrt(sum / count.coerceAtLeast(1)) / 128.0 * 2.8)
+                .coerceIn(0.0, 1.0).toFloat()
+        }
+        var i = 0
+        while (i + 1 < audio.size) {
+            val sample = (((audio[i + 1].toInt() shl 8) or
+                (audio[i].toInt() and 0xff))).toShort().toInt()
+            sum += sample.toDouble() * sample.toDouble()
+            count++
+            i += 2
+        }
+        if (count == 0) return 0f
+        return (sqrt(sum / count) / 32768.0 * 3.0).coerceIn(0.0, 1.0).toFloat()
+    }
+
     private fun speechPlaybackBegan(generation: Long) {
         if (generation != speechGeneration || !isSpeaking ||
             speechPlaybackStarted || !activityResumed || isFinishing || isDestroyed) return
@@ -766,6 +827,7 @@ class MainActivity : Activity() {
         fishAudioTts.stop()
         speechTimeout?.let { mainHandler.removeCallbacks(it) }
         speechTimeout = null
+        emitVoiceAmplitude(0f)
         if (wasSpeaking) voiceEvent("onJarvisSpeakState", "stop")
     }
 
@@ -779,6 +841,7 @@ class MainActivity : Activity() {
             val hadPlayback = speechPlaybackStarted
             speechPlaybackStarted = false
             speechTextLength = 0
+            emitVoiceAmplitude(0f)
             if (hadPlayback) voiceEvent("onJarvisSpeakState", "stop")
             else voiceEvent("onJarvisSpeechState", "idle", "Голосовой ответ завершён.")
             val resume = resumeListeningAfterSpeech
@@ -826,7 +889,8 @@ class MainActivity : Activity() {
             fishAudioTts.speak(text, selectedPersona,
                 onError = { runOnUiThread { speakWithSystemVoice(text, generation) } },
                 onComplete = { finishSpeech(generation) },
-                onStart = { runOnUiThread { speechPlaybackBegan(generation) } })
+                onStart = { runOnUiThread { speechPlaybackBegan(generation) } },
+                onAmplitude = { level -> emitVoiceAmplitude(level) })
         } else speakWithSystemVoice(text, generation)
     }
 
@@ -1402,7 +1466,10 @@ class MainActivity : Activity() {
             startActivity(Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
                 android.net.Uri.parse("package:$packageName")))
         } }
-        @JavascriptInterface fun setPersona(name: String) { selectedPersona = name; prefs.edit().putString("persona", name).apply() }
+        @JavascriptInterface fun setPersona(name: String) {
+            selectedPersona = canonicalPersona(name)
+            prefs.edit().putString("persona", selectedPersona).apply()
+        }
 
         @JavascriptInterface fun setUserProfile(name: String, day: Int, month: Int, year: Int) {
             if (name.isNotBlank()) memory.setUserName(name)
