@@ -69,8 +69,9 @@ class JarvisMemory(context: Context) {
 
     /**
      * Optional context sent to GigaChat ONLY when the user enables the memory
-     * sharing switch. Excludes birthday, habits, contact data and raw OS events.
-     * Chat turns are provided separately as bounded role-labelled messages.
+     * sharing switch. Includes the profile and saved self-disclosures, but never
+     * raw contact data, OS events or credential-like secrets. Chat turns are
+     * provided separately as bounded role-labelled messages.
      */
     fun approvedBrainFacts(query: String = ""): String = synchronized(lock) {
         val facts = readArray("facts")
@@ -168,15 +169,23 @@ class JarvisMemory(context: Context) {
         val clean = text.trim().replace(Regex("\\s+"), " ").trimEnd('.', '!', '?').take(700)
         if (clean.length < 3 || containsSecret(clean)) return false
         val lower = normalize(clean)
+        val conversationalPrefix = Regex(
+            "^(?:кстати\\s*[,—-]?\\s*|а\\s+ещ[её]\\s+|и\\s+ещ[её]\\s+|ещ[её]\\s+|также\\s+|вообще\\s+)"
+        )
+        val candidate = lower.replace(conversationalPrefix, "")
         val starters = listOf(
             "я ", "мне ", "меня ", "мой ", "моя ", "моё ", "мое ", "мои ",
             "у меня ", "мы ", "нам ", "наш ", "наша ", "наше ", "наши "
         )
-        if (starters.none { lower.startsWith(it) }) return false
-        if (lower.startsWith("меня зовут ") || lower.startsWith("моё имя ") || lower.startsWith("мое имя ")) {
-            // Name has its own dedicated field; keeping the full statement too
-            // makes it searchable together with all other personal facts.
-        }
+        val strongMarkers = listOf(
+            " у меня ", " меня зовут ", " моё имя ", " мое имя ",
+            " я живу ", " я работаю ", " я учусь ", " я родился ", " я родилась ",
+            " я люблю ", " я не люблю ", " я предпочитаю ", " я увлекаюсь ",
+            " я интересуюсь ", " мне нравится ", " мне не нравится "
+        )
+        val padded = " $lower "
+        if (starters.none { candidate.startsWith(it) } &&
+            strongMarkers.none { padded.contains(it) }) return false
         appendUniqueFact("Пользователь рассказал: $clean")
         true
     }
