@@ -62,6 +62,7 @@ class MainActivity : Activity() {
     private var pendingWeatherLocation = false
     private var pendingLocalNewsLocation = false
     private var pendingLocationOnly = false
+    private var startupPermissionsRequested = false
     private var wakeSessionActive = false
     private var wakeFailures = 0
     private var wakeRestart: Runnable? = null
@@ -527,8 +528,45 @@ class MainActivity : Activity() {
         } else voiceEvent("onJarvisSpeechState", "idle", "Голосовой ввод завершён. Нажмите на круг, чтобы повторить.")
     }
 
+    private fun requestStartupRuntimePermissions() {
+        if (!activityResumed || isFinishing || isDestroyed) return
+        val missing = mutableListOf<String>()
+        fun addIfMissing(permission: String) {
+            if (ContextCompat.checkSelfPermission(this, permission) != PackageManager.PERMISSION_GRANTED)
+                missing += permission
+        }
+        addIfMissing(Manifest.permission.RECORD_AUDIO)
+        addIfMissing(Manifest.permission.CAMERA)
+        addIfMissing(Manifest.permission.ACCESS_COARSE_LOCATION)
+        addIfMissing(Manifest.permission.READ_CONTACTS)
+        addIfMissing(Manifest.permission.READ_CALL_LOG)
+        addIfMissing(Manifest.permission.CALL_PHONE)
+        if (android.os.Build.VERSION.SDK_INT >= 33) addIfMissing(Manifest.permission.POST_NOTIFICATIONS)
+        if (missing.isEmpty()) {
+            voiceEvent("onJarvisPermissionsStatus", "granted", "Основные разрешения JARVIS уже выданы.")
+            return
+        }
+        voiceEvent("onJarvisPermissionsStatus", "request",
+            "Android запросит основные разрешения JARVIS. Специальные доступы Android выдаются отдельно в системных настройках.")
+        ActivityCompat.requestPermissions(this, missing.toTypedArray(), 7430)
+    }
+
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == 7430) {
+            val denied = permissions.filterIndexed { index, _ ->
+                grantResults.getOrNull(index) != PackageManager.PERMISSION_GRANTED
+            }
+            val state = if (denied.isEmpty()) "granted" else "partial"
+            val message = if (denied.isEmpty())
+                "Основные разрешения JARVIS выданы."
+            else
+                "Часть разрешений не выдана. Их можно разрешить позже в настройках Android."
+            voiceEvent("onJarvisPermissionsStatus", state, message)
+            voiceEvent("onJarvisWakeModeChanged", prefs.getBoolean("wake_mode", false))
+            voiceEvent("onJarvisBackgroundWakeChanged", prefs.getBoolean("background_wake", false))
+            return
+        }
         if (requestCode == 7421) {
             val granted = ContextCompat.checkSelfPermission(
                 this, Manifest.permission.ACCESS_COARSE_LOCATION
@@ -613,6 +651,10 @@ class MainActivity : Activity() {
     override fun onResume() {
         super.onResume()
         activityResumed = true
+        if (!startupPermissionsRequested) {
+            startupPermissionsRequested = true
+            mainHandler.postDelayed({ requestStartupRuntimePermissions() }, 500L)
+        }
         wakeModeEnabled = prefs.getBoolean("wake_mode", false)
         backgroundWakeEnabled = prefs.getBoolean("background_wake", false)
         speechInput.resume()
@@ -970,7 +1012,7 @@ class MainActivity : Activity() {
             val turns = if (useHistory) memory.recentDialogues().takeLast(6) else emptyList()
             val remote = if (useHistory) cloudMemory.recall(memoryText).take(2500) else ""
             val context = if (!useHistory) "" else buildString {
-                append(memory.approvedBrainFacts())
+                append(memory.approvedBrainFacts(memoryText))
                 if (remote.isNotBlank()) append("\nРелевантные заметки:\n").append(remote)
             }
             val response = gigaChat.askConversation(memoryText, persona, context, turns)
@@ -998,7 +1040,7 @@ class MainActivity : Activity() {
         val s = text.trim()
         val lower = s.lowercase(Locale("ru", "RU"))
         val marker = when { lower.startsWith("меня зовут ") -> "меня зовут "; lower.startsWith("моё имя ") -> "моё имя "; lower.startsWith("мое имя ") -> "мое имя "; else -> "" }
-        if (marker.isNotEmpty()) memory.setUserName(s.substring(marker.length).trim().split(" ").firstOrNull().orEmpty())
+        if (marker.isNotEmpty()) memory.setUserName(s.substring(marker.length).trim().take(120))
     }
 
     private fun checkForUpdates(manual: Boolean) {
@@ -1065,6 +1107,7 @@ class MainActivity : Activity() {
         private fun executeCommand(text: String): String {
             val memoryText = text.substringAfter("Запрос пользователя: ", text).trim()
             rememberUserName(memoryText)
+            memory.rememberSelfDisclosure(memoryText)
             memory.recordHabit(memoryText)
             val normalized = memoryText.lowercase()
             if (skills.enabled("reminders")) {
@@ -1102,11 +1145,9 @@ class MainActivity : Activity() {
                 normalized.contains("кто твой создатель") ||
                 normalized.contains("кто создал тебя")
             ) {
-                val answer = if (selectedPersona == "J.A.R.V.I.S.") {
-                    "Я J.A.R.V.I.S. — искусственный интеллект и голосовой помощник Тони Старка из фильма «Железный человек»."
-                } else {
-                    "Я $selectedPersona — персонаж J.A.R.V.I.S. и мой создатель — сам J.A.R.V.I.S. из фильма «Железный человек»."
-                }
+                val answer = "Я J.A.R.V.I.S. — реальная программная версия голосового помощника, " +
+                    "вдохновлённая J.A.R.V.I.S. из фильма «Железный человек». " +
+                    "Эту версию создал Пименов Алекс Романович."
                 memory.rememberTurn(memoryText, answer)
                 return answer
             }
