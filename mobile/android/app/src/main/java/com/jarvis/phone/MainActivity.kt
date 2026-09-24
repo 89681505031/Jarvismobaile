@@ -331,6 +331,7 @@ class MainActivity : Activity() {
             pendingBackgroundNotification = false
             prefs.edit().putBoolean("background_wake", false).apply()
             WakeForegroundService.shouldListenInBackground = false
+            WakeForegroundService.microphoneHandoffReady = false
             stopService(Intent(this, WakeForegroundService::class.java))
             voiceEvent("onJarvisBackgroundWakeChanged", false)
             voiceEvent("onJarvisBackgroundWakeStatus", "off", "Работа в фоне отключена.")
@@ -365,6 +366,30 @@ class MainActivity : Activity() {
         prefs.edit().putBoolean("background_wake", true).apply()
         voiceEvent("onJarvisBackgroundWakeChanged", true)
         startBackgroundServiceIfEligible()
+    }
+
+    private fun minimizeToBackground(): String {
+        if (!wakeModeEnabled || !offlineWake.installed()) {
+            return "Сначала установите офлайн-модель и включите активацию по имени."
+        }
+        if (!backgroundWakeEnabled) {
+            return "Сначала включите «Продолжать слушать в свёрнутом виде» в настройках."
+        }
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+            return "Разрешите микрофон, затем повторите."
+        }
+        if (android.os.Build.VERSION.SDK_INT >= 33 &&
+            ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+            return "Разрешите уведомления JARVIS, затем повторите."
+        }
+
+        startBackgroundServiceIfEligible()
+        voiceEvent("onJarvisBackgroundWakeStatus", "handoff",
+            "Перехожу в фон. После сворачивания микрофон перейдёт в фоновую службу.")
+        mainHandler.postDelayed({
+            if (!isFinishing && !isDestroyed && activityResumed) moveTaskToBack(true)
+        }, 350L)
+        return "Перехожу в фоновый режим."
     }
 
     private fun startListening() {
@@ -594,6 +619,7 @@ class MainActivity : Activity() {
         // Stop the service's recorder before reacquiring audio for the visible
         // screen; this prevents two Vosk sessions competing for the microphone.
         WakeForegroundService.shouldListenInBackground = false
+        WakeForegroundService.microphoneHandoffReady = false
         if (diagnosticInterrupted) {
             diagnosticInterrupted = false
             voiceEvent("onJarvisMicDiagnostic", "cancelled",
@@ -629,17 +655,26 @@ class MainActivity : Activity() {
         val handoff = backgroundWakeEnabled && wakeModeEnabled && !systemSpeechOpen &&
             !diagnosticRunning && !isFinishing && !isDestroyed
         wakeSessionActive = false
+        WakeForegroundService.shouldListenInBackground = handoff
+        WakeForegroundService.microphoneHandoffReady = false
         offlineWake.stop {
-            // This callback fires AFTER the old AudioRecord was released.
-            // startForegroundService was already called while Activity was visible.
+            // This callback fires AFTER the visible Activity has fully released
+            // its AudioRecord. If the Service already exists it starts now; if
+            // Android is still creating it, onStartCommand sees these flags later.
             if (handoff && !activityResumed &&
                 prefs.getBoolean("background_wake", false) &&
                 prefs.getBoolean("wake_mode", false)) {
-                WakeForegroundService.shouldListenInBackground = true
+                WakeForegroundService.microphoneHandoffReady = true
                 WakeForegroundService.active?.startBackgroundListening()
+            } else {
+                WakeForegroundService.shouldListenInBackground = false
+                WakeForegroundService.microphoneHandoffReady = false
             }
         }
-        if (!handoff) WakeForegroundService.shouldListenInBackground = false
+        if (!handoff) {
+            WakeForegroundService.shouldListenInBackground = false
+            WakeForegroundService.microphoneHandoffReady = false
+        }
         voiceEvent(
             "onJarvisWakeStatus", "paused",
             if (handoff) "Переключаю тихое ожидание в фоновый режим…"
@@ -1155,6 +1190,16 @@ class MainActivity : Activity() {
             }
 
             if (
+                normalized == "уйди в фон" ||
+                normalized == "уйди в трей" ||
+                normalized == "свернись" ||
+                normalized == "сверни приложение" ||
+                normalized == "работай в фоне"
+            ) {
+                return minimizeToBackground()
+            }
+
+            if (
                 normalized == "погода" ||
                 normalized == "погода сейчас" ||
                 normalized == "погода сегодня" ||
@@ -1270,6 +1315,7 @@ class MainActivity : Activity() {
         }
         @JavascriptInterface fun getWakeModeEnabled(): Boolean = prefs.getBoolean("wake_mode", false)
         @JavascriptInterface fun getBackgroundWakeEnabled(): Boolean = prefs.getBoolean("background_wake", false)
+        @JavascriptInterface fun minimizeToBackground(): String = this@MainActivity.minimizeToBackground()
         @JavascriptInterface fun setBackgroundWakeEnabled(enabled: Boolean) {
             runOnUiThread { this@MainActivity.setBackgroundWakeEnabled(enabled) }
         }
