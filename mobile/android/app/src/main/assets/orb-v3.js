@@ -207,6 +207,6 @@
   window.addEventListener?.('resize',sizeCanvas,{passive:true});
   window.addEventListener?.('pagehide',cancel,{passive:true});
   window.JarvisHudState=Object.freeze({mode:()=>mode,energy:()=>level,pseudoSpeech:()=>syntheticSpeech(clock()),persona:()=>personaName?.textContent||'J.A.R.V.I.S.'});
-  setPersona(localStorage?.getItem?.('jarvisPersona')||'J.A.R.V.I.S.');
+  setPersona(window.localStorage?.getItem?.('jarvisPersona')||'J.A.R.V.I.S.');
   sizeCanvas();setMode('idle');scheduleBlink();
 })();
