@@ -33,7 +33,8 @@ window.onJarvisWakeModeChanged=enabled=>{
 };
 window.onJarvisWakeDetected=(persona,rest)=>{
   state.wakeActive=false;
-  const key=Object.keys(activationPersonas).find(k=>activationPersonas[k]===persona);
+  const canonical=canonicalPersona(persona);
+  const key=Object.keys(activationPersonas).find(k=>activationPersonas[k]===canonical);
   if(key)activatePersona(key);
   const commandText=(rest||'').trim();
   if(commandText)sendCommand(commandText);
