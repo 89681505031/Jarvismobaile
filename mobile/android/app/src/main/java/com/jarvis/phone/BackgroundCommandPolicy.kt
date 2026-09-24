@@ -18,6 +18,9 @@ object BackgroundCommandPolicy {
 
     fun permitted(phrase: String): Boolean {
         val text = normalize(phrase)
+        // Never let a safe fragment promote a combined command that also
+        // requests a visible/sensitive action.
+        if (requiresVisibleUi(text)) return false
 
         // Flashlight.
         if (
@@ -27,7 +30,7 @@ object BackgroundCommandPolicy {
 
         // Media volume and mute.
         if (
-            text.contains("громк") || text.contains("тише") ||
+            text.contains("громк") || text.contains("громч") || text.contains("тише") ||
             text == "выключи звук" || text == "включи звук" ||
             text == "убери звук" || text == "верни звук"
         ) return true
@@ -70,9 +73,9 @@ object BackgroundCommandPolicy {
 
     fun requiresVisibleUi(phrase: String): Boolean {
         val text = normalize(phrase)
-        return text.startsWith("открой ") ||
-            text.startsWith("позвони ") ||
-            text.startsWith("найди в интернете") ||
+        return text.contains("открой ") ||
+            text.contains("позвони ") ||
+            text.contains("найди в интернете") ||
             text.startsWith("включи песню ") ||
             (text.startsWith("включи музыку ") && text != "включи музыку") ||
             text.contains("кто звонил") ||
