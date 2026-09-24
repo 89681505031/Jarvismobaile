@@ -52,6 +52,8 @@ class WakeForegroundService : Service() {
     private var tts: TextToSpeech? = null
     private lateinit var fishAudioTts: FishAudioTts
     private lateinit var gigaChat: GigaChatClient
+    private lateinit var reminders: JarvisReminders
+    private lateinit var home: JarvisHomeAssistant
     private val newsFeed = JarvisNewsFeed()
     private val infoExecutor = Executors.newSingleThreadExecutor()
     private var cloudBusy = false
@@ -87,6 +89,8 @@ class WakeForegroundService : Service() {
         router = PhoneCommandRouter(this)
         fishAudioTts = FishAudioTts(this)
         gigaChat = GigaChatClient(this)
+        reminders = JarvisReminders(this)
+        home = JarvisHomeAssistant(this)
         offline = OfflineWakeEngine(
             this,
             onStatus = { status, message ->
@@ -250,21 +254,131 @@ class WakeForegroundService : Service() {
             null -> Unit
         }
 
+        val normalized = BackgroundCommandPolicy.normalize(phrase)
+
+        // Local reminders do not need the Activity.
+        if (normalized == "мои напоминания" || normalized == "список напоминаний") {
+            val response = reminders.list()
+            notificationText = response.take(220)
+            updateNotification()
+            speak(response)
+            return
+        }
+        JarvisReminders.parseRussian(phrase)?.let { parsed ->
+            val response = reminders.schedule(parsed.second, parsed.first)
+            notificationText = response
+            updateNotification()
+            speak(response)
+            return
+        }
+
+        // The single configured Home Assistant light is an explicit, bounded
+        // action and can be controlled while minimized.
+        if (normalized in setOf(
+                "включи умный свет", "выключи умный свет",
+                "включи домашний свет", "выключи домашний свет"
+            )
+        ) {
+            val on = normalized.startsWith("включи")
+            runBackgroundTask("Управляю выбранным светом…") { home.setLight(on) }
+            return
+        }
+
         if (BackgroundCommandPolicy.permitted(phrase)) {
             val response = try { router.execute(phrase) } catch (_: Exception) {
-                "Не удалось выполнить команду. Откройте JARVIS."
+                "Не удалось выполнить команду."
             }
             notificationText = response
             updateNotification()
             speak(response)
-        } else {
-            // Background activity launches, calls, message access and network AI
-            // are NOT silently attempted from a service. User must tap first.
-            pendingCommand = phrase.take(240)
-            notificationText = "Нажмите на уведомление, чтобы продолжить команду в JARVIS"
-            updateNotification()
-            speak("Для этой команды откройте Джарвис через уведомление.")
+            return
         }
+
+        // Exact location is intentionally unavailable to the minimized service.
+        // Weather/local-news asks the user to open the app instead of silently
+        // turning on background location tracking.
+        val needsLocation = normalized.contains("погод") ||
+            normalized.contains("местн") && normalized.contains("новост") ||
+            normalized.contains("новост") && (
+                normalized.contains("рядом") ||
+                normalized.contains("моем городе") ||
+                normalized.contains("моём городе") ||
+                normalized.contains("по месту")
+            )
+        if (needsLocation) {
+            deferToVisibleApp(
+                phrase,
+                "Для погоды и местных новостей откройте JARVIS: приложению нужно только примерное местоположение."
+            )
+            return
+        }
+
+        // Launching apps, calls, searches or reading private messages changes
+        // the visible UI / needs a permission surface, so Android requires user
+        // involvement. Keep these behind the ongoing notification.
+        if (BackgroundCommandPolicy.requiresVisibleUi(phrase) || router.canHandle(phrase)) {
+            deferToVisibleApp(
+                phrase,
+                "Эта команда меняет экран или требует разрешения Android. Нажмите на уведомление JARVIS."
+            )
+            return
+        }
+
+        // Ordinary questions no longer force the app open: GigaChat can answer
+        // directly from the foreground microphone service.
+        if (gigaChat.configured()) {
+            askGigaChatInBackground(phrase)
+        } else {
+            deferToVisibleApp(
+                phrase,
+                "GigaChat ещё не подключён. Откройте JARVIS и настройте мозг GigaChat."
+            )
+        }
+    }
+
+    private fun runBackgroundTask(status: String, work: () -> String) {
+        if (cloudBusy || shuttingDown) return
+        cloudBusy = true
+        notificationText = status
+        updateNotification()
+        infoExecutor.execute {
+            val response = try { work() } catch (_: Exception) { "Не удалось выполнить команду." }
+            ui.post {
+                if (shuttingDown) return@post
+                cloudBusy = false
+                notificationText = response.take(220)
+                updateNotification()
+                speak(response)
+            }
+        }
+    }
+
+    private fun askGigaChatInBackground(phrase: String) {
+        if (cloudBusy || shuttingDown) return
+        cloudBusy = true
+        pendingCommand = null
+        notificationText = "GigaChat думает…"
+        updateNotification()
+        val persona = getSharedPreferences("jarvis_settings", MODE_PRIVATE)
+            .getString("persona", "J.A.R.V.I.S.").orEmpty()
+
+        infoExecutor.execute {
+            val response = gigaChat.askConversation(phrase.take(4000), persona)
+            ui.post {
+                if (shuttingDown) return@post
+                cloudBusy = false
+                notificationText = response.text.take(220)
+                updateNotification()
+                speak(response.text)
+            }
+        }
+    }
+
+    private fun deferToVisibleApp(phrase: String, message: String) {
+        pendingCommand = phrase.take(240)
+        notificationText = message
+        updateNotification()
+        speak(message)
     }
 
     private fun fetchBackgroundNews() {
