@@ -1,4 +1,4 @@
-/* J.A.R.V.I.S. HUD v4 — persona holograms with audio-driven lip sync.
+/* J.A.R.V.I.S. HUD v5 — lifelike persona holograms with stronger audio-driven lip sync.
  * Incoming mic level is used for listening animation.
  * Outgoing voice amplitude comes from native Fish Audio playback or Android TTS
  * audio callbacks. A conservative synthetic envelope is only a compatibility
@@ -23,14 +23,13 @@
     speaking:['ГОЛОСОВОЙ ОТВЕТ','JARVIS отвечает. Нажмите, чтобы остановить'],
     thinking:['ОБРАБОТКА ДАННЫХ','JARVIS обрабатывает команду']
   };
-  const avatarIndex={
-    'J.A.R.V.I.S.':0,
-    'Astra':1,
-    'Luna':2,
-    'Terra':3,
-    'Кибер':4
+  const avatarSources={
+    'J.A.R.V.I.S.':'holograms/jarvis.webp',
+    'Astra':'holograms/astra.webp',
+    'Luna':'holograms/luna.webp',
+    'Terra':'holograms/terra.webp',
+    'Кибер':'holograms/kiber.webp'
   };
-  const avatarSprite='hologram-sprite.webp';
   const ctx=canvas&&typeof canvas.getContext==='function'?canvas.getContext('2d'):null;
   let mode='idle',level=.12,target=.12,micUpdateAt=0,speechStart=0,speechSize=60;
   let voiceUpdateAt=0,voiceTarget=0,raf=0,lastFrame=0,wakeListening=false,blinkTimer=0;
@@ -50,25 +49,41 @@
   }
   function setPersona(name){
     const persona=canonicalPersona(name);
-    const index=avatarIndex[persona]??0;
+    const src=avatarSources[persona]||avatarSources['J.A.R.V.I.S.'];
     if(face){
-      if(face.getAttribute?.('src')!==avatarSprite)face.setAttribute('src',avatarSprite);
-      face.style.left=(-index*100)+'%';
+      if(face.getAttribute?.('src')!==src)face.setAttribute('src',src);
+      face.style.left='0';
     }
     if(mouthFace){
-      if(mouthFace.getAttribute?.('src')!==avatarSprite)mouthFace.setAttribute('src',avatarSprite);
-      mouthFace.style.left=(-index*100)+'%';
+      if(mouthFace.getAttribute?.('src')!==src)mouthFace.setAttribute('src',src);
+      mouthFace.style.left='0';
     }
-    if(avatar){avatar.dataset.persona=persona;avatar.style?.setProperty('--holo-mouth-scale','1');}
+    if(avatar){
+      avatar.dataset.persona=persona;
+      avatar.style?.setProperty('--holo-mouth-scale','1');
+      avatar.style?.setProperty('--talk-x','0px');
+      avatar.style?.setProperty('--talk-y','0px');
+      avatar.style?.setProperty('--talk-tilt','0deg');
+      avatar.style?.setProperty('--brow-lift','0');
+    }
     if(personaName)personaName.textContent=persona;
   }
   function setMouth(v){
     if(!avatar)return;
     const open=mode==='speaking'?clamp(v):0;
+    const now=clock();
+    const sway=Math.sin(now*.026)*open*2.4;
+    const bob=Math.cos(now*.021+.6)*open*1.4;
+    const tilt=Math.sin(now*.018+.4)*open*1.35;
+    const brow=Math.min(1,open*.8);
     avatar.style?.setProperty('--mouth-open',open.toFixed(3));
-    avatar.style?.setProperty('--holo-mouth-scale',(1+open*.34).toFixed(3));
-    avatar.style?.setProperty('--voice-lift',(open*2.2).toFixed(2)+'px');
-    avatar.style?.setProperty('--voice-scale',(1+open*.012).toFixed(3));
+    avatar.style?.setProperty('--holo-mouth-scale',(1+open*.92).toFixed(3));
+    avatar.style?.setProperty('--voice-lift',(open*6.2).toFixed(2)+'px');
+    avatar.style?.setProperty('--voice-scale',(1+open*.028).toFixed(3));
+    avatar.style?.setProperty('--talk-x',sway.toFixed(2)+'px');
+    avatar.style?.setProperty('--talk-y',bob.toFixed(2)+'px');
+    avatar.style?.setProperty('--talk-tilt',tilt.toFixed(2)+'deg');
+    avatar.style?.setProperty('--brow-lift',brow.toFixed(3));
   }
   function scheduleBlink(){
     if(reducedMotion||!avatar||document.hidden)return;
