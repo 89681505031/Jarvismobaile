@@ -47,16 +47,36 @@ function loadPersonas(){personaList.innerHTML='';personas.forEach(([n,d])=>{cons
 function register(){const n=$('profileName').value.trim(),d=+$('profileDay').value,m=+$('profileMonth').value,y=+$('profileYear').value,rf=$('regFishApiKey')?.value.trim()||'',rg=$('regGigaApiKey')?.value.trim()||'';if(!n||!Number.isInteger(d)||!Number.isInteger(m)||!Number.isInteger(y)||y<1900||y>2100||new Date(y,m-1,d).getDate()!==d||new Date(y,m-1,d).getMonth()!==m-1){showMessage('Заполните имя и дату рождения корректно.');return}localStorage.setItem('jarvisName',n);localStorage.setItem('jarvisBirth',JSON.stringify({day:d,month:m,year:y}));localStorage.setItem('jarvisIntroSeen','1');if(rf||rg)window.AndroidJarvis?.setApiKeys?.(rf,rg);$('registration').hidden=true;showMessage('Добро пожаловать, '+n+'. Я JARVIS.');window.AndroidJarvis?.setUserProfile?.(n,d,m,y);window.AndroidJarvis?.command?.('меня зовут '+n);window.AndroidJarvis?.speak?.('Добро пожаловать, '+n);render()}
 if($('saveProfile'))$('saveProfile').onclick=register;
 const __jarvisHasProfile=!!(localStorage.getItem('jarvisName')||localStorage.getItem('jarvisOnboarded'));
-if($('registration'))$('registration').hidden=__jarvisHasProfile;
-(function initLaunchIntro(){
-  const reg=$('registration'),shell=$('introShell');
-  if(!reg||__jarvisHasProfile)return;
-  const played=localStorage.getItem('jarvisIntroSeen')==='1';
-  if(played){shell?.classList.add('intro-finished');return;}
-  reg.hidden=false;
-  deferUi(()=>shell?.classList.add('intro-play'),40);
-  deferUi(()=>shell?.classList.add('intro-phase-2'),1350);
-  deferUi(()=>{shell?.classList.add('intro-finished');localStorage.setItem('jarvisIntroSeen','1');},3150);
+if($('registration')){
+  $('registration').hidden=__jarvisHasProfile;
+  if(!__jarvisHasProfile)$('introShell')?.classList.add('intro-finished');
+}
+(function initActivationSequence(){
+  const overlay=$('activationOverlay'),core=$('activationCore'),percent=$('activationPercent');
+  const version='gideon-turntable-v1';
+  if(!overlay||localStorage.getItem('jarvisActivationVersion')===version)return;
+  overlay.hidden=false;
+  overlay.setAttribute('aria-hidden','false');
+  document.body?.classList?.add('activation-active');
+  deferUi(()=>overlay.classList.add('activation-running'),40);
+  for(let step=0;step<=10;step++){
+    deferUi(()=>{
+      if(percent)percent.textContent=String(step*10);
+      if(core)core.style.setProperty('--activation-progress',String(step/10));
+    },step*500);
+  }
+  deferUi(()=>overlay.classList.add('activation-complete'),5050);
+  deferUi(()=>overlay.classList.add('activation-blob-phase'),5450);
+  deferUi(()=>overlay.classList.add('activation-logo-phase'),6350);
+  deferUi(()=>{
+    overlay.classList.add('activation-exit');
+    localStorage.setItem('jarvisActivationVersion',version);
+  },7350);
+  deferUi(()=>{
+    overlay.hidden=true;
+    overlay.setAttribute('aria-hidden','true');
+    document.body?.classList?.remove('activation-active');
+  },8050);
 })();
 modeButton.onclick=()=>{showMessage('Сейчас подключено управление телефоном. Управление ПК требует отдельного подключения.')};modeNav.onclick=()=>{showMessage('Сейчас подключено управление телефоном. Управление ПК требует отдельного подключения.')};appsNav.onclick=()=>{appsPanel.hidden=!appsPanel.hidden;commandsPanel.hidden=true;settingsPanel.hidden=true;if(!appsPanel.hidden)loadApps()};commandsNav.onclick=()=>{commandsPanel.hidden=!commandsPanel.hidden;appsPanel.hidden=true;settingsPanel.hidden=true};settingsNav.onclick=()=>{settingsPanel.hidden=!settingsPanel.hidden;appsPanel.hidden=true;commandsPanel.hidden=true;if(!settingsPanel.hidden){loadPersonas();syncSettingSwitches();populateSkills();}};refreshApps.onclick=loadApps;if($('selectAllApps'))$('selectAllApps').onclick=selectAllApps;if($('appsSearch'))$('appsSearch').oninput=filterApps;send.onclick=()=>sendCommand();command.onkeydown=e=>{if(e.key==='Enter')sendCommand()};orbButton.onclick=startListening;orbButton.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();startListening()}};saveApiKeys.onclick=()=>{apiStatus.textContent=window.AndroidJarvis?.setApiKeys?.(fishApiKey.value.trim(),'')||'Сохранение доступно в APK';fishApiKey.value=''};$('saveMemory').onclick=()=>{$('memoryStatus').textContent=window.AndroidJarvis?.setMemoryGateway?.($('memoryUrl').value.trim(),$('memoryToken').value.trim())||'Недоступно';$('memoryToken').value=''};$('disableMemory').onclick=()=>{$('memoryStatus').textContent=window.AndroidJarvis?.setMemoryGateway?.('','')||'Недоступно';$('memoryUrl').value='';$('memoryToken').value=''};$('memoryUrl').value=window.AndroidJarvis?.getMemoryGatewayUrl?.()||'';settingsNav.addEventListener('click',()=>{$('memoryStatus').textContent=window.AndroidJarvis?.getMemoryGatewayStatus?.()||'Недоступно'});$('memoryStatus').textContent=window.AndroidJarvis?.getMemoryGatewayStatus?.()||'Локальная память работает.';checkUpdates.onclick=()=>{window.AndroidJarvis?.checkUpdates?.();$('updateInfo').textContent='Проверка подписанного релиза запущена…';};render();
 $('microphoneSettings').onclick=()=>window.AndroidJarvis?.openMicrophoneSettings?.();
