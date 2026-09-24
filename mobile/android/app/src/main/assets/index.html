@@ -9,6 +9,18 @@
   <link rel="stylesheet" href="hud-v3.css">
 </head>
 <body>
+  <div id="activationOverlay" class="activation-overlay" hidden aria-hidden="true">
+    <div class="activation-orbit" id="activationOrbit">
+      <span class="activation-dot activation-dot--a"></span>
+      <span class="activation-dot activation-dot--b"></span>
+      <span class="activation-dot activation-dot--c"></span>
+      <span class="activation-core" id="activationCore"><b id="activationPercent">0</b></span>
+    </div>
+    <div class="activation-blob" id="activationBlob" aria-hidden="true">
+      <i></i><i></i><i></i><i></i><i></i><i></i>
+    </div>
+    <div class="activation-wordmark" id="activationWordmark">Jarvis</div>
+  </div>
   <main class="app">
     <header class="topbar"><div><div class="brand">J.A.R.V.I.S.</div><div id="status" class="status">● ONLINE</div></div><button id="modeButton" class="mode touch-button" type="button">📱 PHONE MODE</button></header>
     <div class="hud-topline" aria-hidden="true"><span>◈ &nbsp; НЕЙРОИНТЕРФЕЙС <b>03</b></span><span id="brainBadge" aria-label="Состояние мозга GigaChat">◇ &nbsp; GIGACHAT · НЕ НАСТРОЕН</span></div>
