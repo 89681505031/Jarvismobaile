@@ -72,17 +72,44 @@ class JarvisMemory(context: Context) {
      * sharing switch. Excludes birthday, habits, contact data and raw OS events.
      * Chat turns are provided separately as bounded role-labelled messages.
      */
-    fun approvedBrainFacts(): String = synchronized(lock) {
+    fun approvedBrainFacts(query: String = ""): String = synchronized(lock) {
         val facts = readArray("facts")
-        val name = getUserName().take(80)
-        buildString {
-            if (name.isNotBlank()) append("Имя: ").append(name).append("\n")
-            val start = maxOf(0, facts.length() - 10)
-            for (i in start until facts.length()) {
-                val fact = facts.optString(i).trim().take(220)
-                if (fact.isNotBlank()) append("Сохранённая заметка: ").append(fact).append("\n")
+        val name = getUserName().take(120)
+        val all = (0 until facts.length())
+            .map { facts.optString(it).trim() }
+            .filter { it.isNotBlank() }
+
+        // Keep every fact on-device. For each GigaChat request select the most
+        // relevant older facts plus recent ones instead of silently forgetting
+        // everything beyond an arbitrary 10/30 item window.
+        val tokens = normalize(query)
+            .split(Regex("[^\\p{L}\\p{N}]+"))
+            .filter { it.length >= 3 }
+            .toSet()
+        val relevant = if (tokens.isEmpty()) emptyList() else all.withIndex()
+            .map { indexed ->
+                val normalizedFact = normalize(indexed.value)
+                val score = tokens.count { normalizedFact.contains(it) }
+                Triple(indexed.value, score, indexed.index)
             }
-        }.trim().take(2500)
+            .filter { it.second > 0 }
+            .sortedWith(compareByDescending<Triple<String, Int, Int>> { it.second }
+                .thenByDescending { it.third })
+            .take(40)
+            .map { it.first }
+
+        val selected = LinkedHashSet<String>()
+        relevant.forEach { selected.add(it) }
+        all.takeLast(40).forEach { selected.add(it) }
+
+        buildString {
+            if (name.isNotBlank()) append("Имя пользователя: ").append(name).append("\n")
+            val birthDate = birthDateSummary()
+            if (birthDate.isNotBlank()) append("Дата рождения пользователя: ").append(birthDate).append("\n")
+            selected.forEach { fact ->
+                append("Сохранённый факт: ").append(fact.take(700)).append("\n")
+            }
+        }.trim().take(12000)
     }
 
     fun clearChatHistory(): Int = synchronized(lock) {
@@ -115,22 +142,46 @@ class JarvisMemory(context: Context) {
                 next.put(fact)
                 limitedFacts = next
             }
-            val start = maxOf(0, limitedFacts.length() - 30)
-            val finalFacts = JSONArray()
-            for (i in start until limitedFacts.length()) finalFacts.put(limitedFacts.optString(i))
-
             prefs.edit()
                 .putString("habits", habits.toString())
                 .putString("habit_commands", boundedCommands.toString())
-                .putString("facts", finalFacts.toString())
+                .putString("facts", limitedFacts.toString())
                 .apply()
         }
     }
 
     fun rememberFact(text: String): Boolean = synchronized(lock) {
         val clean = text.trim().replace(Regex("\\s+"), " ").trimEnd('.', '!', '?')
-        if (clean.length < 2) return false
+        if (clean.length < 2 || containsSecret(clean)) return false
         val fact = if (clean.startsWith("Пользователь ", ignoreCase = true)) clean else "Пользователь: $clean"
+        appendUniqueFact(fact)
+        true
+    }
+
+    /**
+     * Automatically remembers natural first-person self-disclosures such as
+     * family, study, work, preferences, goals and biographical details.
+     * Credentials, payment data and one-time security codes are deliberately
+     * excluded even when they are phrased in the first person.
+     */
+    fun rememberSelfDisclosure(text: String): Boolean = synchronized(lock) {
+        val clean = text.trim().replace(Regex("\\s+"), " ").trimEnd('.', '!', '?').take(700)
+        if (clean.length < 3 || containsSecret(clean)) return false
+        val lower = normalize(clean)
+        val starters = listOf(
+            "я ", "мне ", "меня ", "мой ", "моя ", "моё ", "мое ", "мои ",
+            "у меня ", "мы ", "нам ", "наш ", "наша ", "наше ", "наши "
+        )
+        if (starters.none { lower.startsWith(it) }) return false
+        if (lower.startsWith("меня зовут ") || lower.startsWith("моё имя ") || lower.startsWith("мое имя ")) {
+            // Name has its own dedicated field; keeping the full statement too
+            // makes it searchable together with all other personal facts.
+        }
+        appendUniqueFact("Пользователь рассказал: $clean")
+        true
+    }
+
+    private fun appendUniqueFact(fact: String) {
         val facts = readArray("facts")
         val next = JSONArray()
         for (i in 0 until facts.length()) {
@@ -138,11 +189,17 @@ class JarvisMemory(context: Context) {
             if (existing.isNotBlank() && !existing.equals(fact, ignoreCase = true)) next.put(existing)
         }
         next.put(fact)
-        val start = maxOf(0, next.length() - 30)
-        val limited = JSONArray()
-        for (i in start until next.length()) limited.put(next.optString(i))
-        prefs.edit().putString("facts", limited.toString()).apply()
-        true
+        prefs.edit().putString("facts", next.toString()).apply()
+    }
+
+    private fun containsSecret(text: String): Boolean {
+        val value = normalize(text)
+        val secretMarkers = listOf(
+            "парол", "пин-код", "pin-код", " cvv", " cvc", "api key",
+            "authorization key", "токен", "одноразовый код", "код из смс",
+            "номер карты", "секретный ключ"
+        )
+        return secretMarkers.any { value.contains(it) }
     }
 
     fun forgetFact(query: String): Boolean = synchronized(lock) {
@@ -174,9 +231,14 @@ class JarvisMemory(context: Context) {
 
     fun factsSummary(): String = synchronized(lock) {
         val facts = readArray("facts")
-        if (facts.length() == 0) return "Пока важных фактов обо мне не сохранено."
+        val name = getUserName()
+        val birthDate = birthDateSummary()
+        if (facts.length() == 0 && name.isBlank() && birthDate.isBlank())
+            return "Пока важных фактов обо мне не сохранено."
         buildString {
             append("Что JARVIS запомнил о пользователе:\n")
+            if (name.isNotBlank()) append("• Имя: ").append(name).append("\n")
+            if (birthDate.isNotBlank()) append("• Дата рождения: ").append(birthDate).append("\n")
             for (i in 0 until facts.length()) {
                 val fact = facts.optString(i).trim()
                 if (fact.isNotBlank()) append("• ").append(fact).append("\n")
