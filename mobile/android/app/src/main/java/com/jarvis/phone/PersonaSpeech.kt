@@ -9,7 +9,7 @@ object PersonaSpeech {
             "astra" -> 1.05f to 1.16f
             "luna" -> 0.90f to 1.08f
             "terra" -> 0.96f to 0.91f
-            "cyber" -> 1.08f to 0.86f
+            "cyber", "сайбер", "кибер" -> 1.08f to 0.86f
             else -> 0.98f to 1.0f
         }
         tts.setSpeechRate(rate)
