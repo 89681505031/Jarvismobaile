@@ -58,6 +58,7 @@ class MainActivity : Activity() {
     private lateinit var vision: JarvisVision
     private lateinit var updates: JarvisSignedUpdates
     private lateinit var localInfo: JarvisLocalInfo
+    private val newsFeed = JarvisNewsFeed()
     private var pendingWeatherLocation = false
     private var pendingLocalNewsLocation = false
     private var pendingLocationOnly = false
@@ -772,77 +773,22 @@ class MainActivity : Activity() {
     private fun fetchNewsAndSpeak() {
         showVoiceStatus("Получаю свежие новости…")
         backgroundExecutor.execute {
-            try {
-                val feeds = listOf(
-                    "https://news.google.com/rss?hl=ru&gl=RU&ceid=RU:ru",
-                    "https://news.google.com/rss?hl=ru&gl=US&ceid=US:ru"
-                )
-                var items = emptyList<String>()
-                var lastError: Exception? = null
-
-                for (feed in feeds) {
-                    try {
-                        val connection = (URL(feed).openConnection() as HttpURLConnection).apply {
-                            requestMethod = "GET"
-                            connectTimeout = 10_000
-                            readTimeout = 20_000
-                            instanceFollowRedirects = true
-                            setRequestProperty("User-Agent", "Mozilla/5.0 JARVIS-Android")
-                            setRequestProperty("Accept", "application/rss+xml, application/xml, text/xml")
-                        }
-                        val code = connection.responseCode
-                        val stream = if (code in 200..299) connection.inputStream else connection.errorStream
-                        val xml = stream?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }.orEmpty()
-                        connection.disconnect()
-                        if (code !in 200..299) throw IllegalStateException("HTTP $code")
-
-                        items = Regex("<item>([\\s\\S]*?)</item>", RegexOption.IGNORE_CASE)
-                            .findAll(xml)
-                            .mapNotNull { match ->
-                                val block = match.groupValues[1]
-                                val title = Regex("<title>([\\s\\S]*?)</title>", RegexOption.IGNORE_CASE)
-                                    .find(block)?.groupValues?.get(1)
-                                    ?.replace("<![CDATA[", "")?.replace("]]>", "")
-                                    ?.let { Html.fromHtml(it, Html.FROM_HTML_MODE_LEGACY).toString().trim() }
-                                val source = Regex("<source[^>]*>([\\s\\S]*?)</source>", RegexOption.IGNORE_CASE)
-                                    .find(block)?.groupValues?.get(1)
-                                    ?.replace("<![CDATA[", "")?.replace("]]>", "")
-                                    ?.let { Html.fromHtml(it, Html.FROM_HTML_MODE_LEGACY).toString().trim() }
-                                title?.takeIf { it.isNotBlank() }?.let {
-                                    if (source.isNullOrBlank()) it else "$it — $source"
-                                }
-                            }
-                            .distinct()
-                            .take(6)
-                            .toList()
-                        if (items.isNotEmpty()) break
-                    } catch (e: Exception) {
-                        lastError = e
-                    }
-                }
-
-                if (items.isEmpty()) throw lastError ?: IllegalStateException("В новостной ленте нет материалов.")
-                val prompt = "Сделай краткую нейтральную голосовую сводку свежих новостей на русском языке. Назови 5-6 главных тем по заголовкам ниже, по 1-2 предложения на тему. Не придумывай факты и явно отделяй заголовок от неподтвержденных деталей. Заголовки: " + items.joinToString(" | ")
+            val finalText = try {
+                val items = newsFeed.fetchMainHeadlines()
+                val prompt = "Сделай краткую нейтральную голосовую сводку свежих новостей на русском языке. " +
+                    "Назови 5-6 главных тем по заголовкам ниже, по 1-2 предложения на тему. " +
+                    "Не придумывай факты и явно отделяй заголовок от неподтвержденных деталей. Заголовки: " +
+                    items.joinToString(" | ")
                 val response = gigaChat.askConversation(prompt, selectedPersona)
-                val finalText = if (!response.success) {
-                    "Свежие новости по заголовкам: " + items.take(5).joinToString(". ")
-                } else response.text
-                runOnUiThread {
-                    if (isFinishing || isDestroyed) return@runOnUiThread
-                    if (::webView.isInitialized) {
-                        webView.evaluateJavascript("window.onGigaChatResult && window.onGigaChatResult(${JSONObject.quote(finalText)})", null)
-                    }
-                    speak(finalText, resumeAfterSpeech = true)
-                }
-            } catch (e: Exception) {
-                val message = "Не удалось получить свежие новости: ${e.message ?: "ошибка соединения"}"
-                runOnUiThread {
-                    if (isFinishing || isDestroyed) return@runOnUiThread
-                    if (::webView.isInitialized) {
-                        webView.evaluateJavascript("window.onGigaChatResult && window.onGigaChatResult(${JSONObject.quote(message)})", null)
-                    }
-                    speak(message, resumeAfterSpeech = true)
-                }
+                if (response.success) response.text
+                else "Свежие новости по заголовкам: " + items.take(5).joinToString(". ")
+            } catch (_: Exception) {
+                "Не удалось получить свежие новости. Проверьте интернет и повторите запрос."
+            }
+            runOnUiThread {
+                if (isFinishing || isDestroyed) return@runOnUiThread
+                voiceEvent("onGigaChatResult", finalText)
+                speak(finalText, resumeAfterSpeech = true)
             }
         }
     }
@@ -1098,7 +1044,9 @@ class MainActivity : Activity() {
                 val parsed = JarvisReminders.parseRussian(memoryText)
                 if (parsed != null) return reminders.schedule(parsed.second, parsed.first)
             }
-            if (skills.enabled("offline")) OfflineKnowledge.answer(memoryText)?.let { return it }
+            // Time/date are core local commands and must work regardless of
+            // optional skill switches left over from an earlier build.
+            OfflineKnowledge.answer(memoryText)?.let { return it }
             if (skills.enabled("home") && normalized in setOf(
                     "включи умный свет", "выключи умный свет", "включи домашний свет", "выключи домашний свет")) {
                 val on = normalized.startsWith("включи")
@@ -1239,6 +1187,7 @@ class MainActivity : Activity() {
             if (
                 normalized == "новости" ||
                 normalized.contains("сводка новостей") ||
+                normalized.contains("сводки новостей") ||
                 normalized.contains("последние новости") ||
                 normalized.contains("главные новости")
             ) {
