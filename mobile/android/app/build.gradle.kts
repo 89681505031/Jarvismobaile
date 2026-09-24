@@ -26,8 +26,8 @@ android {
     buildTypes {
         getByName("debug") {
             if (System.getenv("JARVIS_DIAGNOSTIC") == "1") {
-                applicationIdSuffix = ".brain"
-                manifestPlaceholders["jarvisLabel"] = "J.A.R.V.I.S. BRAIN"
+                applicationIdSuffix = ".tray2"
+                manifestPlaceholders["jarvisLabel"] = "J.A.R.V.I.S. TRAY 2"
             }
         }
     }
