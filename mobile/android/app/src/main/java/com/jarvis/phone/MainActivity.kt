@@ -717,6 +717,20 @@ class MainActivity : Activity() {
                 WakeForegroundService.microphoneHandoffReady = false
             }
         }
+        // Safety net for OEMs that delay the Vosk shutdown callback while the
+        // Activity is moving to background. The service itself now retries if
+        // Android still reports the microphone as busy.
+        if (handoff) {
+            mainHandler.postDelayed({
+                if (!activityResumed &&
+                    prefs.getBoolean("background_wake", false) &&
+                    prefs.getBoolean("wake_mode", false)) {
+                    WakeForegroundService.shouldListenInBackground = true
+                    WakeForegroundService.microphoneHandoffReady = true
+                    WakeForegroundService.active?.startBackgroundListening()
+                }
+            }, 1_000L)
+        }
         if (!handoff) {
             WakeForegroundService.shouldListenInBackground = false
             WakeForegroundService.microphoneHandoffReady = false
