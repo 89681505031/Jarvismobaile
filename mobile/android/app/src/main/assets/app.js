@@ -280,7 +280,7 @@ $('skipRegistration').onclick=()=>{localStorage.setItem('jarvisOnboarded','1');$
   };
   share.onchange=e=>{
     window.AndroidJarvis?.setGigaShareMessages?.(!!e.target.checked);
-    setTimeout(refresh,150);
+    deferUi(refresh,150);
   };
   $('clearGigaHistory').onclick=()=>{
     info.textContent=window.AndroidJarvis?.clearGigaBrainHistory?.()||'Недоступно';
