@@ -37,6 +37,7 @@ class WakeForegroundService : Service() {
         private const val CHANNEL_ID = "jarvis_bg_voice_v1"
         private const val NOTIFICATION_ID = 719
         private const val FOLLOW_UP_MS = 12_000L
+        private const val MAX_MIC_START_ATTEMPTS = 6
 
         @Volatile var active: WakeForegroundService? = null
             private set
@@ -70,6 +71,25 @@ class WakeForegroundService : Service() {
     private var pendingCommand: String? = null
     private var notificationText = "Тихая активация работает в фоне"
     private var startedAtElapsed = 0L
+    private var micStartAttempt = 0
+    private val micStartRetry = object : Runnable {
+        override fun run() {
+            if (shuttingDown || !foreground || !shouldListenInBackground || !microphoneHandoffReady ||
+                !getSharedPreferences("jarvis_settings", MODE_PRIVATE).getBoolean("background_wake", false)) return
+            if (WakeBatteryPolicy.batteryTooLow(this@WakeForegroundService)) {
+                notificationText = "Заряд ниже 15%: фоновое ожидание не запускается."
+                updateNotification()
+                failClosed()
+                return
+            }
+            micStartAttempt++
+            notificationText = if (micStartAttempt <= 1)
+                "Передаю микрофон в фоновый режим…"
+            else "Повторно подключаю фоновый микрофон… попытка $micStartAttempt"
+            updateNotification()
+            offline.start()
+        }
+    }
     private val batteryCheck = object : Runnable {
         override fun run() {
             if (shuttingDown || !shouldListenInBackground) return
@@ -100,14 +120,39 @@ class WakeForegroundService : Service() {
             this,
             onStatus = { status, message ->
                 when (status) {
-                    "error", "model_needed" -> {
+                    "error" -> {
+                        val canRetry = !shuttingDown && foreground && shouldListenInBackground &&
+                            microphoneHandoffReady &&
+                            getSharedPreferences("jarvis_settings", MODE_PRIVATE)
+                                .getBoolean("background_wake", false) &&
+                            micStartAttempt < MAX_MIC_START_ATTEMPTS
+                        if (canRetry) {
+                            val delay = when (micStartAttempt) {
+                                0, 1 -> 350L
+                                2 -> 650L
+                                3 -> 1_000L
+                                4 -> 1_500L
+                                else -> 2_000L
+                            }
+                            notificationText = "Микрофон ещё занят системой. Повторяю подключение…"
+                            updateNotification()
+                            ui.removeCallbacks(micStartRetry)
+                            ui.postDelayed(micStartRetry, delay)
+                        } else {
+                            notificationText = message
+                            updateNotification()
+                            // Stop audio safely after several real retries instead of
+                            // giving up on the first transient AudioRecord failure.
+                            failClosed()
+                        }
+                    }
+                    "model_needed" -> {
                         notificationText = message
                         updateNotification()
-                        // Stop rather than run an apparent 'always listening' service
-                        // that is not capturing any audio.
                         failClosed()
                     }
                     "listening" -> {
+                        micStartAttempt = 0
                         notificationText = "Тихая активация: Джарвис, Астра, Луна, Терра, Сайбер"
                         updateNotification()
                     }
@@ -190,7 +235,15 @@ class WakeForegroundService : Service() {
         if (startedAtElapsed == 0L) startedAtElapsed = SystemClock.elapsedRealtime()
         ui.removeCallbacks(batteryCheck)
         ui.postDelayed(batteryCheck, 60_000L)
-        if (offline.installed()) offline.start()
+
+        // Some OEMs (including MIUI/HyperOS) release the foreground AudioRecord
+        // a few hundred milliseconds after its shutdown callback. Delay the first
+        // background acquisition slightly and retry transient failures.
+        ui.removeCallbacks(micStartRetry)
+        micStartAttempt = 0
+        notificationText = "Передаю микрофон в фоновый режим…"
+        updateNotification()
+        ui.postDelayed(micStartRetry, 400L)
     }
 
     /** Main-thread only: hand the microphone back to the visible Activity. */
@@ -200,6 +253,8 @@ class WakeForegroundService : Service() {
         armedUntil = 0L
         startedAtElapsed = 0L
         ui.removeCallbacks(batteryCheck)
+        ui.removeCallbacks(micStartRetry)
+        micStartAttempt = 0
         pendingCommand = null
         notificationText = "JARVIS открыт: микрофон временно передан экрану."
         updateNotification()
@@ -534,6 +589,8 @@ class WakeForegroundService : Service() {
         // is allowed to persist background_wake=false.
         shouldListenInBackground = false
         microphoneHandoffReady = false
+        ui.removeCallbacks(micStartRetry)
+        micStartAttempt = 0
         offline.stop()
         stopSelf()
     }
