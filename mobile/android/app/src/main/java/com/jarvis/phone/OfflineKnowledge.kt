@@ -17,6 +17,7 @@ object OfflineKnowledge {
             normalized == "время" ||
             normalized == "который час" ||
             normalized == "который сейчас час" ||
+            (normalized.contains("котор") && normalized.contains("час")) ||
             (normalized.contains("врем") && (
                 normalized.contains("сколько") ||
                 normalized.contains("скажи") ||
