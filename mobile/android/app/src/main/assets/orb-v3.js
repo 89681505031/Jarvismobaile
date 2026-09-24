@@ -35,7 +35,7 @@
   const meshCtx=meshCanvas&&typeof meshCanvas.getContext==='function'?meshCanvas.getContext('2d'):null;
   let mode='idle',level=.12,target=.12,micUpdateAt=0,speechStart=0,speechSize=60;
   let voiceUpdateAt=0,voiceTarget=0,raf=0,lastFrame=0,wakeListening=false,blinkTimer=0;
-  let meshRaf=0,meshLast=0,meshPoints=[],meshBuiltFor='',mouthOpen=0;
+  let meshPoints=[],meshBuiltFor='',mouthOpen=0;
 
   const clock=()=>window.performance&&typeof window.performance.now==='function'?window.performance.now():Date.now();
   const clamp=v=>Math.max(0,Math.min(1,Number(v)||0));
@@ -81,6 +81,7 @@
       }
       meshPoints=points;
       meshBuiltFor=face.getAttribute?.('src')||'';
+      drawMesh(clock());
     }catch(_){
       meshPoints=[];
     }
@@ -95,7 +96,7 @@
         meshBuiltFor='';
       }
       face.style.left='0';
-      face.onload=()=>{buildMesh();startMesh();};
+      face.onload=()=>{buildMesh();};
     }
     if(mouthFace){
       if(mouthFace.getAttribute?.('src')!==src)mouthFace.setAttribute('src',src);
@@ -171,24 +172,6 @@
       meshCtx.fill();
     }
     meshCtx.restore();
-  }
-
-  function meshLoop(now){
-    meshRaf=0;
-    if(document.hidden||reducedMotion)return;
-    if(now-meshLast>=40){
-      meshLast=now;
-      drawMesh(now);
-    }
-    if(typeof window.requestAnimationFrame==='function')meshRaf=window.requestAnimationFrame(meshLoop);
-  }
-  function startMesh(){
-    if(meshRaf||document.hidden||reducedMotion||typeof window.requestAnimationFrame!=='function')return;
-    meshRaf=window.requestAnimationFrame(meshLoop);
-  }
-  function stopMesh(){
-    if(meshRaf&&typeof window.cancelAnimationFrame==='function')window.cancelAnimationFrame(meshRaf);
-    meshRaf=0;
   }
 
   function scheduleBlink(){
@@ -272,6 +255,7 @@
     orb.style.setProperty('--hud-core-alpha',Math.min(1,.25+level*.7).toFixed(3));
     orb.style.setProperty('--hud-wave-alpha',Math.min(1,.56+level*.44).toFixed(3));
     setMouth(mode==='speaking'?Math.max(0,(level-.05)*.92):0);
+    drawMesh(now);
     drawWave();raf=window.requestAnimationFrame(animate);
   }
   function start(){
@@ -290,7 +274,8 @@
     }else if(next==='idle'||next==='thinking'){
       target=.12;level=.12;orb.style.setProperty('--local-energy','.12');setMouth(0);
     }
-    start();if(mode==='idle'||mode==='thinking')drawWave();
+    start();
+    if(mode==='idle'||mode==='thinking'){drawMesh(clock());drawWave();}
   }
   function setMicLevel(value,source){
     if(mode!=='listening'||!Number.isFinite(Number(value)))return;
@@ -340,17 +325,17 @@
   });
   document.addEventListener?.('visibilitychange',()=>{
     if(document.hidden){
-      cancel();stopMesh();
+      cancel();
       if(blinkTimer&&typeof window.clearTimeout==='function')window.clearTimeout(blinkTimer);
     }else{
       if(mode==='speaking')setMode('idle');
-      sizeCanvas();if(mode==='listening')start();startMesh();scheduleBlink();
+      sizeCanvas();drawMesh(clock());if(mode==='listening')start();scheduleBlink();
     }
   });
   window.addEventListener?.('resize',()=>{sizeCanvas();defer(buildMesh,80)},{passive:true});
-  window.addEventListener?.('pagehide',()=>{cancel();stopMesh()},{passive:true});
+  window.addEventListener?.('pagehide',cancel,{passive:true});
   window.JarvisHudState=Object.freeze({mode:()=>mode,energy:()=>level,pseudoSpeech:()=>syntheticSpeech(clock()),persona:()=>personaName?.textContent||'J.A.R.V.I.S.'});
 
   setPersona(window.localStorage?.getItem?.('jarvisPersona')||'J.A.R.V.I.S.');
-  sizeCanvas();setMode('idle');scheduleBlink();startMesh();
+  sizeCanvas();setMode('idle');scheduleBlink();
 })();
