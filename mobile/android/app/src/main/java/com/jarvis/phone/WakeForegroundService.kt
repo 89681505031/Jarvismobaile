@@ -395,12 +395,10 @@ class WakeForegroundService : Service() {
         infoExecutor.execute {
             val summary = try {
                 val items = newsFeed.fetchMainHeadlines()
-                val prompt = "Сделай короткую нейтральную голосовую сводку главных свежих новостей. " +
-                    "Используй только эти заголовки, не придумывай детали. Назови 4-6 тем: " +
-                    items.joinToString(" | ")
+                val prompt = JarvisNewsSummary.prompt(items)
                 val response = gigaChat.askConversation(prompt, persona)
-                if (response.success) response.text
-                else "Главные свежие новости: " + items.take(5).joinToString(". ")
+                if (response.success && JarvisNewsSummary.usableModelSummary(response.text)) response.text
+                else JarvisNewsSummary.fallback(items)
             } catch (_: Exception) {
                 "Не удалось получить главные новости. Проверьте интернет и повторите."
             }
