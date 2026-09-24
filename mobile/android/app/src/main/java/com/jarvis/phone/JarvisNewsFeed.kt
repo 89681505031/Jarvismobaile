@@ -10,18 +10,23 @@ class JarvisNewsFeed {
         val feeds = listOf(
             "https://news.google.com/rss?hl=ru&gl=RU&ceid=RU:ru",
             "https://news.google.com/rss?hl=ru&gl=PL&ceid=PL:ru",
-            "https://news.google.com/rss?hl=ru&gl=US&ceid=US:ru"
+            "https://news.google.com/rss?hl=ru&gl=US&ceid=US:ru",
+            "https://feeds.bbci.co.uk/news/world/rss.xml",
+            "https://feeds.bbci.co.uk/news/technology/rss.xml",
+            "https://www.theguardian.com/world/rss"
         )
         var lastError: Exception? = null
+        val collected = LinkedHashSet<String>()
         for (feed in feeds) {
             try {
-                val items = parse(get(feed))
-                if (items.isNotEmpty()) return items
+                parse(get(feed)).forEach { collected.add(it) }
+                if (collected.size >= 10) break
             } catch (e: Exception) {
                 lastError = e
             }
         }
-        throw lastError ?: IllegalStateException("В новостной ленте нет материалов.")
+        if (collected.isNotEmpty()) return collected.take(10)
+        throw lastError ?: IllegalStateException("В новостных лентах нет материалов.")
     }
 
     private fun get(endpoint: String): String {
@@ -47,31 +52,32 @@ class JarvisNewsFeed {
     }
 
     companion object {
-        fun parse(xml: String): List<String> =
-            Regex("<item>([\\s\\S]*?)</item>", RegexOption.IGNORE_CASE)
-                .findAll(xml)
-                .mapNotNull { match ->
-                    val block = match.groupValues[1]
-                    val title = Regex(
-                        "<title>([\\s\\S]*?)</title>",
-                        RegexOption.IGNORE_CASE
-                    ).find(block)?.groupValues?.get(1)
-                        ?.replace("<![CDATA[", "")?.replace("]]>", "")
-                        ?.let { Html.fromHtml(it, Html.FROM_HTML_MODE_LEGACY).toString().trim() }
+        fun parse(xml: String): List<String> {
+            val blocks = sequence {
+                Regex("<item\\b[^>]*>([\\s\\S]*?)</item>", RegexOption.IGNORE_CASE)
+                    .findAll(xml).forEach { yield(it.groupValues[1]) }
+                Regex("<entry\\b[^>]*>([\\s\\S]*?)</entry>", RegexOption.IGNORE_CASE)
+                    .findAll(xml).forEach { yield(it.groupValues[1]) }
+            }
+            return blocks.mapNotNull { block ->
+                val title = Regex(
+                    "<title(?:\\s[^>]*)?>([\\s\\S]*?)</title>",
+                    RegexOption.IGNORE_CASE
+                ).find(block)?.groupValues?.get(1)
+                    ?.replace("<![CDATA[", "")?.replace("]]>", "")
+                    ?.let { Html.fromHtml(it, Html.FROM_HTML_MODE_LEGACY).toString().trim() }
 
-                    val source = Regex(
-                        "<source[^>]*>([\\s\\S]*?)</source>",
-                        RegexOption.IGNORE_CASE
-                    ).find(block)?.groupValues?.get(1)
-                        ?.replace("<![CDATA[", "")?.replace("]]>", "")
-                        ?.let { Html.fromHtml(it, Html.FROM_HTML_MODE_LEGACY).toString().trim() }
+                val source = Regex(
+                    "<source[^>]*>([\\s\\S]*?)</source>",
+                    RegexOption.IGNORE_CASE
+                ).find(block)?.groupValues?.get(1)
+                    ?.replace("<![CDATA[", "")?.replace("]]>", "")
+                    ?.let { Html.fromHtml(it, Html.FROM_HTML_MODE_LEGACY).toString().trim() }
 
-                    title?.takeIf { it.isNotBlank() }?.let {
-                        if (source.isNullOrBlank()) it else "$it — $source"
-                    }
+                title?.takeIf { it.isNotBlank() }?.let {
+                    if (source.isNullOrBlank()) it else "$it — $source"
                 }
-                .distinct()
-                .take(7)
-                .toList()
+            }.distinct().take(10).toList()
+        }
     }
 }
