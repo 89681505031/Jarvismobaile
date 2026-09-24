@@ -1,0 +1,54 @@
+name: Verify Android pull requests
+
+on:
+  pull_request:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify memory gateway
+        working-directory: memory-gateway
+        run: npm ci && npm test
+      - name: Verify web voice/HUD interface
+        run: node --test tests/voice-ui.test.cjs tests/hud-v3.test.cjs
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+      - name: Test and lint Android
+        working-directory: mobile/android
+        run: gradle --no-daemon testDebugUnitTest lintDebug
+      - name: Build isolated ARM64 PR tester
+        working-directory: mobile/android
+        env:
+          JARVIS_DIAGNOSTIC: "1"
+          JARVIS_ARM64_ONLY: "1"
+        run: gradle --no-daemon assembleDebug
+      - name: Preserve PR APK
+        run: |
+          cp mobile/android/app/build/outputs/apk/debug/app-debug.apk jarvis-phone-pr-test.apk
+          python3 - <<'PY'
+          from zipfile import ZipFile
+          with ZipFile('jarvis-phone-pr-test.apk') as z:
+              native=[x for x in z.namelist() if x.startswith('lib/')]
+              assert 'lib/arm64-v8a/libvosk.so' in native
+              assert all(x.startswith('lib/arm64-v8a/') for x in native)
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: jarvis-phone-pr-test
+          path: jarvis-phone-pr-test.apk
+          if-no-files-found: error
