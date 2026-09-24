@@ -40,10 +40,30 @@ function selectAllApps(){document.querySelectorAll('#appsList input[type=checkbo
 function loadPersonas(){personaList.innerHTML='';personas.forEach(([n,d])=>{const r=document.createElement('label');r.className='app-row';r.innerHTML='<span><strong>'+n+'</strong><small> — '+d+'</small></span><input type="radio" name="persona" '+(state.persona===n?'checked':'')+'>';r.querySelector('input').onchange=()=>{state.persona=n;localStorage.setItem('jarvisPersona',n);window.AndroidJarvis?.setPersona(n);render()};personaList.appendChild(r)})}
 function register(){const n=$('profileName').value.trim(),d=+$('profileDay').value,m=+$('profileMonth').value,y=+$('profileYear').value,rf=$('regFishApiKey')?.value.trim()||'',rg=$('regGigaApiKey')?.value.trim()||'';if(!n||!Number.isInteger(d)||!Number.isInteger(m)||!Number.isInteger(y)||y<1900||y>2100||new Date(y,m-1,d).getDate()!==d||new Date(y,m-1,d).getMonth()!==m-1){showMessage('Заполните имя и дату рождения корректно.');return}localStorage.setItem('jarvisName',n);localStorage.setItem('jarvisBirth',JSON.stringify({day:d,month:m,year:y}));if(rf||rg)window.AndroidJarvis?.setApiKeys?.(rf,rg);$('registration').hidden=true;showMessage('Добро пожаловать, '+n+'. Я JARVIS.');window.AndroidJarvis?.setUserProfile?.(n,d,m,y);window.AndroidJarvis?.command?.('меня зовут '+n);window.AndroidJarvis?.speak?.('Добро пожаловать, '+n);render()}
 if($('saveProfile'))$('saveProfile').onclick=register;if(localStorage.getItem('jarvisName')||localStorage.getItem('jarvisOnboarded'))$('registration').hidden=true;else $('registration').hidden=false;
-modeButton.onclick=()=>{showMessage('Сейчас подключено управление телефоном. Управление ПК требует отдельного подключения.')};modeNav.onclick=()=>{showMessage('Сейчас подключено управление телефоном. Управление ПК требует отдельного подключения.')};appsNav.onclick=()=>{appsPanel.hidden=!appsPanel.hidden;commandsPanel.hidden=true;settingsPanel.hidden=true;if(!appsPanel.hidden)loadApps()};commandsNav.onclick=()=>{commandsPanel.hidden=!commandsPanel.hidden;appsPanel.hidden=true;settingsPanel.hidden=true};settingsNav.onclick=()=>{settingsPanel.hidden=!settingsPanel.hidden;appsPanel.hidden=true;commandsPanel.hidden=true;if(!settingsPanel.hidden)loadPersonas()};refreshApps.onclick=loadApps;if($('selectAllApps'))$('selectAllApps').onclick=selectAllApps;if($('appsSearch'))$('appsSearch').oninput=filterApps;send.onclick=()=>sendCommand();command.onkeydown=e=>{if(e.key==='Enter')sendCommand()};orbButton.onclick=startListening;orbButton.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();startListening()}};saveApiKeys.onclick=()=>{apiStatus.textContent=window.AndroidJarvis?.setApiKeys?.(fishApiKey.value.trim(),'')||'Сохранение доступно в APK';fishApiKey.value=''};$('saveMemory').onclick=()=>{$('memoryStatus').textContent=window.AndroidJarvis?.setMemoryGateway?.($('memoryUrl').value.trim(),$('memoryToken').value.trim())||'Недоступно';$('memoryToken').value=''};$('disableMemory').onclick=()=>{$('memoryStatus').textContent=window.AndroidJarvis?.setMemoryGateway?.('','')||'Недоступно';$('memoryUrl').value='';$('memoryToken').value=''};$('memoryUrl').value=window.AndroidJarvis?.getMemoryGatewayUrl?.()||'';settingsNav.addEventListener('click',()=>{$('memoryStatus').textContent=window.AndroidJarvis?.getMemoryGatewayStatus?.()||'Недоступно'});$('memoryStatus').textContent=window.AndroidJarvis?.getMemoryGatewayStatus?.()||'Локальная память работает.';checkUpdates.onclick=()=>{window.AndroidJarvis?.checkUpdates?.();$('updateInfo').textContent='Проверка подписанного релиза запущена…';};render();
+modeButton.onclick=()=>{showMessage('Сейчас подключено управление телефоном. Управление ПК требует отдельного подключения.')};modeNav.onclick=()=>{showMessage('Сейчас подключено управление телефоном. Управление ПК требует отдельного подключения.')};appsNav.onclick=()=>{appsPanel.hidden=!appsPanel.hidden;commandsPanel.hidden=true;settingsPanel.hidden=true;if(!appsPanel.hidden)loadApps()};commandsNav.onclick=()=>{commandsPanel.hidden=!commandsPanel.hidden;appsPanel.hidden=true;settingsPanel.hidden=true};settingsNav.onclick=()=>{settingsPanel.hidden=!settingsPanel.hidden;appsPanel.hidden=true;commandsPanel.hidden=true;if(!settingsPanel.hidden){loadPersonas();syncSettingSwitches();populateSkills();}};refreshApps.onclick=loadApps;if($('selectAllApps'))$('selectAllApps').onclick=selectAllApps;if($('appsSearch'))$('appsSearch').oninput=filterApps;send.onclick=()=>sendCommand();command.onkeydown=e=>{if(e.key==='Enter')sendCommand()};orbButton.onclick=startListening;orbButton.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();startListening()}};saveApiKeys.onclick=()=>{apiStatus.textContent=window.AndroidJarvis?.setApiKeys?.(fishApiKey.value.trim(),'')||'Сохранение доступно в APK';fishApiKey.value=''};$('saveMemory').onclick=()=>{$('memoryStatus').textContent=window.AndroidJarvis?.setMemoryGateway?.($('memoryUrl').value.trim(),$('memoryToken').value.trim())||'Недоступно';$('memoryToken').value=''};$('disableMemory').onclick=()=>{$('memoryStatus').textContent=window.AndroidJarvis?.setMemoryGateway?.('','')||'Недоступно';$('memoryUrl').value='';$('memoryToken').value=''};$('memoryUrl').value=window.AndroidJarvis?.getMemoryGatewayUrl?.()||'';settingsNav.addEventListener('click',()=>{$('memoryStatus').textContent=window.AndroidJarvis?.getMemoryGatewayStatus?.()||'Недоступно'});$('memoryStatus').textContent=window.AndroidJarvis?.getMemoryGatewayStatus?.()||'Локальная память работает.';checkUpdates.onclick=()=>{window.AndroidJarvis?.checkUpdates?.();$('updateInfo').textContent='Проверка подписанного релиза запущена…';};render();
 $('microphoneSettings').onclick=()=>window.AndroidJarvis?.openMicrophoneSettings?.();
-$('wakeMode').checked=!!window.AndroidJarvis?.getWakeModeEnabled?.();
-$('backgroundWake').checked=!!window.AndroidJarvis?.getBackgroundWakeEnabled?.();
+
+function syncSettingSwitches(){
+  if($('wakeMode'))$('wakeMode').checked=!!window.AndroidJarvis?.getWakeModeEnabled?.();
+  if($('backgroundWake'))$('backgroundWake').checked=!!window.AndroidJarvis?.getBackgroundWakeEnabled?.();
+  if($('voiceInterrupt'))$('voiceInterrupt').checked=!!window.AndroidJarvis?.getInterruptByVoice?.();
+  if($('overlayMode'))$('overlayMode').checked=!!window.AndroidJarvis?.overlayEnabled?.();
+  try{
+    const brain=JSON.parse(window.AndroidJarvis?.getGigaBrainStatus?.()||'{}');
+    if($('gigaBrainMemory'))$('gigaBrainMemory').checked=!!brain.memory;
+    if($('gigaShareMessages'))$('gigaShareMessages').checked=!!brain.shareMessages;
+  }catch(_){}
+}
+function scheduleSettingSync(){
+  setTimeout(syncSettingSwitches,80);
+  setTimeout(syncSettingSwitches,350);
+}
+syncSettingSwitches();
+window.onJarvisPermissionsStatus=(phase,text)=>{
+  const info=$('micDiagnostics');
+  if(info&&text)info.textContent=text;
+  scheduleSettingSync();
+};
 window.onJarvisBackgroundWakeChanged=enabled=>{ $('backgroundWake').checked=!!enabled; };
 window.onJarvisBackgroundWakeStatus=(status,text)=>{
   const info=$('backgroundWakeStatus');
@@ -63,6 +83,7 @@ $('backgroundWake').onchange=e=>{
   // The native side may reject the request if microphone, model, or visible
   // notification permission is absent; onJarvisBackgroundWakeChanged restores UI.
   window.AndroidJarvis.setBackgroundWakeEnabled(!!e.target.checked);
+  scheduleSettingSync();
 };
 window.onJarvisPendingBackgroundCommand=text=>{
   command.value=String(text||'').slice(0,240);
@@ -94,6 +115,7 @@ $('wakeMode').onchange=e=>{
     return;
   }
   window.AndroidJarvis.setWakeModeEnabled(!!e.target.checked);
+  scheduleSettingSync();
 };
 window.onJarvisMicDiagnostic=(status,text)=>{
   const info=$('micDiagnostics'),button=$('diagnoseMic');
@@ -118,7 +140,10 @@ window.onJarvisFeatureStatus=(feature,text)=>{
   if(feature==='vision')showMessage(text);
 };
 $('voiceInterrupt').checked=!!window.AndroidJarvis?.getInterruptByVoice?.();
-$('voiceInterrupt').onchange=e=>window.AndroidJarvis?.setInterruptByVoice?.(!!e.target.checked);
+$('voiceInterrupt').onchange=e=>{
+  window.AndroidJarvis?.setInterruptByVoice?.(!!e.target.checked);
+  scheduleSettingSync();
+};
 $('batteryMinutes').value=String(window.AndroidJarvis?.batteryMinutes?.()??0);
 $('batteryMinutes').onchange=e=>{
   const ok=window.AndroidJarvis?.setBatteryMinutes?.(Number(e.target.value));
@@ -161,7 +186,10 @@ function populateSkills(){
     const row=document.createElement('label'),span=document.createElement('span'),input=document.createElement('input');
     row.className='app-row';span.textContent=item.title;
     input.type='checkbox';input.checked=!!item.enabled;
-    input.onchange=e=>{if(!window.AndroidJarvis?.enableSkill?.(item.id,!!e.target.checked))e.target.checked=!e.target.checked};
+    input.onchange=e=>{
+      if(!window.AndroidJarvis?.enableSkill?.(item.id,!!e.target.checked))e.target.checked=!e.target.checked;
+      setTimeout(populateSkills,150);
+    };
     row.appendChild(span);row.appendChild(input);$('skillCatalog').appendChild(row);
   });
 }
@@ -171,7 +199,10 @@ window.onJarvisOverlayStatus=(enabled,text)=>{
   $('overlayMode').checked=!!enabled;
   $('overlayStatus').textContent=text||'';
 };
-$('overlayMode').onchange=e=>window.AndroidJarvis?.setOverlayEnabled?.(!!e.target.checked);
+$('overlayMode').onchange=e=>{
+  window.AndroidJarvis?.setOverlayEnabled?.(!!e.target.checked);
+  scheduleSettingSync();
+};
 window.onJarvisInterruptStatus=text=>{ $('micStatus').textContent=text;showMessage(text); };
 
 $('skipRegistration').onclick=()=>{localStorage.setItem('jarvisOnboarded','1');$('registration').hidden=true;showMessage('Нажмите на круг, чтобы проверить голосовой ввод.');};
@@ -240,8 +271,14 @@ $('skipRegistration').onclick=()=>{localStorage.setItem('jarvisOnboarded','1');$
     }
     window.AndroidJarvis.testGigaChatBrain();
   };
-  brainMemory.onchange=e=>window.AndroidJarvis?.setGigaBrainMemory?.(!!e.target.checked);
-  share.onchange=e=>window.AndroidJarvis?.setGigaShareMessages?.(!!e.target.checked);
+  brainMemory.onchange=e=>{
+    window.AndroidJarvis?.setGigaBrainMemory?.(!!e.target.checked);
+    setTimeout(refresh,150);
+  };
+  share.onchange=e=>{
+    window.AndroidJarvis?.setGigaShareMessages?.(!!e.target.checked);
+    setTimeout(refresh,150);
+  };
   $('clearGigaHistory').onclick=()=>{
     info.textContent=window.AndroidJarvis?.clearGigaBrainHistory?.()||'Недоступно';
   };
