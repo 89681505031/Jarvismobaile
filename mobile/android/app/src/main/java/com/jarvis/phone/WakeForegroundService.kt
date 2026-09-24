@@ -41,8 +41,11 @@ class WakeForegroundService : Service() {
         @Volatile var active: WakeForegroundService? = null
             private set
 
-        // Only MainActivity sets this after its microphone has actually stopped.
+        // MainActivity requests a handoff while visible, then marks the old
+        // AudioRecord as released. This removes the race between Activity pause
+        // and asynchronous foreground-service creation.
         @Volatile var shouldListenInBackground: Boolean = false
+        @Volatile var microphoneHandoffReady: Boolean = false
     }
 
     private val ui = Handler(Looper.getMainLooper())
@@ -162,7 +165,7 @@ class WakeForegroundService : Service() {
                         return START_NOT_STICKY
                     }
                 }
-                if (shouldListenInBackground) startBackgroundListening()
+                if (shouldListenInBackground && microphoneHandoffReady) startBackgroundListening()
             }
             else -> {
                 // Never start a microphone service from a null restart intent.
@@ -174,7 +177,7 @@ class WakeForegroundService : Service() {
 
     /** Main-thread only: called once UI's own AudioRecord has stopped. */
     fun startBackgroundListening() {
-        if (shuttingDown || !foreground || !shouldListenInBackground ||
+        if (shuttingDown || !foreground || !shouldListenInBackground || !microphoneHandoffReady ||
             !getSharedPreferences("jarvis_settings", MODE_PRIVATE).getBoolean("background_wake", false)) return
         if (WakeBatteryPolicy.batteryTooLow(this)) {
             notificationText = "Заряд ниже 15%: фоновое ожидание не запускается."
@@ -191,6 +194,7 @@ class WakeForegroundService : Service() {
     /** Main-thread only: hand the microphone back to the visible Activity. */
     fun pauseForForeground(afterStopped: () -> Unit) {
         shouldListenInBackground = false
+        microphoneHandoffReady = false
         armedUntil = 0L
         startedAtElapsed = 0L
         ui.removeCallbacks(batteryCheck)
@@ -519,6 +523,7 @@ class WakeForegroundService : Service() {
         getSharedPreferences("jarvis_settings", MODE_PRIVATE).edit()
             .putBoolean("background_wake", false).apply()
         shouldListenInBackground = false
+        microphoneHandoffReady = false
         offline.stop()
         stopSelf()
     }
@@ -528,12 +533,14 @@ class WakeForegroundService : Service() {
             .putBoolean("background_wake", false)
             .putBoolean("wake_mode", false).apply()
         shouldListenInBackground = false
+        microphoneHandoffReady = false
         stopSelf()
     }
 
     override fun onDestroy() {
         shuttingDown = true
         shouldListenInBackground = false
+        microphoneHandoffReady = false
         armedUntil = 0L
         ui.removeCallbacksAndMessages(null)
         try { offline.release() } catch (_: Exception) {}
