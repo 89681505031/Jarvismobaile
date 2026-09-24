@@ -50,6 +50,10 @@ window.onJarvisBackgroundWakeStatus=(status,text)=>{
   info.textContent=text||'Фоновое ожидание';
   info.setAttribute('data-status',status);
 };
+$('minimizeJarvis').onclick=()=>{
+  const result=window.AndroidJarvis?.minimizeToBackground?.()||'Нужна обновлённая версия JARVIS.';
+  $('backgroundWakeStatus').textContent=result;
+};
 $('backgroundWake').onchange=e=>{
   if(!window.AndroidJarvis?.setBackgroundWakeEnabled){
     e.target.checked=false;
@@ -115,10 +119,10 @@ window.onJarvisFeatureStatus=(feature,text)=>{
 };
 $('voiceInterrupt').checked=!!window.AndroidJarvis?.getInterruptByVoice?.();
 $('voiceInterrupt').onchange=e=>window.AndroidJarvis?.setInterruptByVoice?.(!!e.target.checked);
-$('batteryMinutes').value=String(window.AndroidJarvis?.batteryMinutes?.()??30);
+$('batteryMinutes').value=String(window.AndroidJarvis?.batteryMinutes?.()??0);
 $('batteryMinutes').onchange=e=>{
   const ok=window.AndroidJarvis?.setBatteryMinutes?.(Number(e.target.value));
-  if(!ok)$('batteryMinutes').value='30';
+  if(!ok)$('batteryMinutes').value='0';
 };
 $('addReminder').onclick=()=>{
   const text=$('reminderText').value.trim(),n=Number($('reminderMinutes').value);
