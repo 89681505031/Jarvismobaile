@@ -527,12 +527,14 @@ body::after{
 }
 .holo-face,.holo-mouth-layer img{
   position:absolute;
-  inset:0;
-  width:100%;height:100%;
-  object-fit:cover;
-  object-position:center;
+  top:0;
+  left:0;
+  width:500%;height:100%;
+  max-width:none;
+  object-fit:fill;
   user-select:none;
   -webkit-user-drag:none;
+  will-change:left,transform;
 }
 .holo-face{
   opacity:.96;
