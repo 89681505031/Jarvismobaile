@@ -15,6 +15,11 @@ class BackgroundInfoPolicyTest {
         assertEquals(BackgroundInfoPolicy.Kind.MAIN_NEWS, BackgroundInfoPolicy.classify("Новости"))
         assertEquals(BackgroundInfoPolicy.Kind.MAIN_NEWS, BackgroundInfoPolicy.classify("Главные сводки новостей"))
         assertEquals(BackgroundInfoPolicy.Kind.MAIN_NEWS, BackgroundInfoPolicy.classify("Последние новости!"))
+        assertEquals(BackgroundInfoPolicy.Kind.MAIN_NEWS, BackgroundInfoPolicy.classify("Какие новости?"))
+        assertEquals(BackgroundInfoPolicy.Kind.MAIN_NEWS, BackgroundInfoPolicy.classify("Какие сегодня новости"))
+        assertEquals(BackgroundInfoPolicy.Kind.MAIN_NEWS, BackgroundInfoPolicy.classify("Что в новостях"))
+        assertEquals(BackgroundInfoPolicy.Kind.MAIN_NEWS, BackgroundInfoPolicy.classify("Новости на сегодня"))
+        assertEquals(BackgroundInfoPolicy.Kind.MAIN_NEWS, BackgroundInfoPolicy.classify("Что нового в мире"))
         assertNull(BackgroundInfoPolicy.classify("местные новости"))
         assertNull(BackgroundInfoPolicy.classify("погода"))
     }
