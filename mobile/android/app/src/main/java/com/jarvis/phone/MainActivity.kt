@@ -137,7 +137,7 @@ class MainActivity : Activity() {
                     }
                     override fun onAudioAvailable(utteranceId: String?, audio: ByteArray?) {
                         val id = utteranceId?.substringAfterLast("-")?.toLongOrNull() ?: return
-                        if (id != speechGeneration || audio.isNullOrEmpty()) return
+                        if (id != speechGeneration || audio == null || audio.isEmpty()) return
                         emitVoiceAmplitude(pcmAmplitude(audio, ttsAudioEncoding))
                     }
                     override fun onDone(utteranceId: String?) { utteranceId?.substringAfterLast("-")?.toLongOrNull()?.let { finishSpeech(it) } }
