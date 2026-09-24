@@ -76,6 +76,24 @@ jobs:
           fi
       - name: Preserve standard APK
         run: cp mobile/android/app/build/outputs/apk/debug/app-debug.apk jarvis-phone-microphone-fixed.apk
+      - name: Build production unsigned release APK
+        working-directory: mobile/android
+        run: gradle --no-daemon assembleRelease
+      - name: Preserve production release and signing tool
+        run: |
+          cp mobile/android/app/build/outputs/apk/release/app-release-unsigned.apk jarvis-phone-release-unsigned.apk
+          APKSIGNER_JAR=$(find "$ANDROID_HOME/build-tools" -path '*/lib/apksigner.jar' -print | sort -V | tail -n 1)
+          test -n "$APKSIGNER_JAR"
+          cp "$APKSIGNER_JAR" apksigner.jar
+          echo "Production package: com.jarvis.phone" >> "$GITHUB_STEP_SUMMARY"
+          echo "Production artifact is unsigned by design; final signing key is kept outside the public repository." >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: jarvis-production-release-unsigned
+          path: |
+            jarvis-phone-release-unsigned.apk
+            apksigner.jar
+          if-no-files-found: error
       - name: Build side-by-side JARVIS TRAY2 Android APK
         working-directory: mobile/android
         env:
