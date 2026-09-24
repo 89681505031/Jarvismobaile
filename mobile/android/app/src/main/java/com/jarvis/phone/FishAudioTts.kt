@@ -16,16 +16,16 @@ class FishAudioTts(private val context: Context) {
         private const val MODEL = "s2.1-pro-free"
         private const val JARVIS_VOICE_ID = "4c3eaacc1a0545cdb0295bfddf3e3785"
         private const val ASTRA_VOICE_ID = "560ef3514c4f44ee9b36b270d718bb39"
-        private const val LUNA_VOICE_ID = "2a1036d645634680b3cc69aeeb60375b"
+        private const val LUNA_VOICE_ID = "d76f881a99464a74962db3c90918aea0"
         private const val CYBER_VOICE_ID = "cc1b79b1108f4ed3b8aac118ba6ebd07"
-        private const val TERRA_VOICE_ID = "c962ed46edfd419abc530d1e33a7435f"
+        private const val TERRA_VOICE_ID = "b347db033a6549378b48d00acb0d06cd"
 
         fun voiceIdFor(persona: String): String? = when (persona.trim().lowercase()) {
             "j.a.r.v.i.s.", "jarvis", "j.a.r.v.i.s" -> JARVIS_VOICE_ID
             "astra" -> ASTRA_VOICE_ID
             "luna" -> LUNA_VOICE_ID
             "terra" -> TERRA_VOICE_ID
-            "cyber" -> CYBER_VOICE_ID
+            "cyber", "сайбер", "кибер" -> CYBER_VOICE_ID
             else -> null
         }
     }
@@ -34,6 +34,8 @@ class FishAudioTts(private val context: Context) {
     private val mainHandler = Handler(Looper.getMainLooper())
     private val generation = java.util.concurrent.atomic.AtomicInteger()
     private var player: MediaPlayer? = null
+    private var visualizer: Visualizer? = null
+    private var amplitudeSink: ((Float) -> Unit)? = null
     private var playingFile: File? = null
     @Volatile private var connection: HttpURLConnection? = null
     @Volatile private var closed = false
@@ -43,10 +45,12 @@ class FishAudioTts(private val context: Context) {
         persona: String,
         onError: ((String) -> Unit)? = null,
         onComplete: (() -> Unit)? = null,
-        onStart: (() -> Unit)? = null
+        onStart: (() -> Unit)? = null,
+        onAmplitude: ((Float) -> Unit)? = null
     ) {
         if (closed) return
         stop()
+        amplitudeSink = onAmplitude
         val token = generation.get()
         val prefs = context.getSharedPreferences("jarvis_settings", Context.MODE_PRIVATE)
         val apiKey = prefs.getString("fish_api_key", "").orEmpty().trim()
@@ -96,6 +100,7 @@ class FishAudioTts(private val context: Context) {
                         next.setOnPreparedListener {
                             if (token == generation.get() && !closed) {
                                 try {
+                                    attachVisualizer(it, token, onAmplitude)
                                     it.start()
                                     onStart?.invoke()
                                 } catch (_: Exception) {
@@ -120,11 +125,63 @@ class FishAudioTts(private val context: Context) {
         }
     }
 
+    private fun attachVisualizer(
+        mediaPlayer: MediaPlayer,
+        token: Int,
+        onAmplitude: ((Float) -> Unit)?
+    ) {
+        if (onAmplitude == null) return
+        releaseVisualizer()
+        try {
+            val next = Visualizer(mediaPlayer.audioSessionId)
+            next.captureSize = Visualizer.getCaptureSizeRange()[1]
+            next.setDataCaptureListener(object : Visualizer.OnDataCaptureListener {
+                override fun onWaveFormDataCapture(
+                    visualizer: Visualizer?,
+                    waveform: ByteArray?,
+                    samplingRate: Int
+                ) {
+                    if (waveform.isNullOrEmpty() || token != generation.get() || closed) return
+                    var sum = 0.0
+                    for (sample in waveform) {
+                        val centered = (sample.toInt() and 0xff) - 128
+                        sum += centered * centered
+                    }
+                    val rms = sqrt(sum / waveform.size) / 128.0
+                    val level = (rms * 3.1).coerceIn(0.0, 1.0).toFloat()
+                    mainHandler.post {
+                        if (token == generation.get() && !closed) onAmplitude.invoke(level)
+                    }
+                }
+
+                override fun onFftDataCapture(
+                    visualizer: Visualizer?,
+                    fft: ByteArray?,
+                    samplingRate: Int
+                ) = Unit
+            }, Visualizer.getMaxCaptureRate() / 2, true, false)
+            next.enabled = true
+            visualizer = next
+        } catch (_: Exception) {
+            // Voice playback must continue even on devices that disable Visualizer.
+            releaseVisualizer()
+        }
+    }
+
+    private fun releaseVisualizer() {
+        try { visualizer?.enabled = false } catch (_: Exception) { }
+        try { visualizer?.release() } catch (_: Exception) { }
+        visualizer = null
+        amplitudeSink?.let { sink -> mainHandler.post { sink(0f) } }
+    }
+
     private fun releasePlayer() {
+        releaseVisualizer()
         try { player?.release() } catch (_: Exception) { }
         player = null
         playingFile?.delete()
         playingFile = null
+        amplitudeSink = null
     }
 
     fun stop() {
