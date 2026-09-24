@@ -1184,13 +1184,7 @@ class MainActivity : Activity() {
                 return "Получаю местную новостную сводку…"
             }
 
-            if (
-                normalized == "новости" ||
-                normalized.contains("сводка новостей") ||
-                normalized.contains("сводки новостей") ||
-                normalized.contains("последние новости") ||
-                normalized.contains("главные новости")
-            ) {
+            if (BackgroundInfoPolicy.classify(memoryText) == BackgroundInfoPolicy.Kind.MAIN_NEWS) {
                 fetchNewsAndSpeak()
                 memory.rememberTurn(memoryText, "Получаю свежую сводку новостей.")
                 return "Получаю свежую сводку новостей."
