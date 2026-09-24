@@ -21,6 +21,7 @@ object BackgroundInfoPolicy {
             text == "время" ||
             text == "который час" ||
             text == "который сейчас час" ||
+            (text.contains("котор") && text.contains("час")) ||
             (text.contains("врем") && (
                 text.contains("сколько") ||
                 text.contains("скажи") ||
