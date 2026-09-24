@@ -37,3 +37,40 @@ button,input{font:inherit}button{cursor:pointer}
 
 select{background:#05080c;border:1px solid #243746;color:#e8f1ff;border-radius:12px;min-height:52px;padding:12px;font:inherit}
 .app-empty{white-space:pre-wrap;overflow-wrap:anywhere}
+
+
+/* First-launch activation inspired by the user-supplied reference video. */
+#registration{background:#fff;padding:18px;color:#111}
+.intro-shell{position:relative;width:min(440px,100%);min-height:640px;background:#fff;border-radius:34px;overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,.12);display:flex;align-items:flex-end;justify-content:center}
+.intro-splash{position:absolute;inset:0;display:grid;place-items:center;background:#fff;z-index:2;transition:opacity .55s ease,transform .7s ease}
+.intro-stage{display:flex;flex-direction:column;align-items:center;gap:12px;transform:translateY(-12px)}
+.intro-dots{position:relative;width:108px;height:108px;display:grid;place-items:center}
+.intro-dot{position:absolute;border-radius:999px;background:#111;box-shadow:0 6px 16px rgba(0,0,0,.08)}
+.intro-dot--core{width:20px;height:20px;animation:introPulse 1.2s ease-in-out infinite}
+.intro-dot--orbit{width:8px;height:8px;opacity:.92}
+.intro-dot--a{animation:introOrbitA 1.8s linear infinite}
+.intro-dot--b{animation:introOrbitB 1.9s linear infinite}
+.intro-dot--c{animation:introOrbitC 2.1s linear infinite}
+.intro-blob{width:92px;height:92px;border-radius:30px;background:linear-gradient(155deg,#3158ff,#6f84ff 42%,#6da9ff 100%);transform:scale(.2) rotate(-20deg);opacity:0;box-shadow:0 22px 46px rgba(56,96,255,.28);transition:all .65s cubic-bezier(.2,.8,.2,1)}
+.intro-logo{font-size:28px;font-weight:600;letter-spacing:.02em;color:#111;opacity:0;transform:translateY(10px);transition:all .45s ease}
+.intro-tag{font-size:13px;letter-spacing:.18em;text-transform:uppercase;color:#95a1b0;opacity:0;transform:translateY(6px);transition:all .45s ease}
+.intro-card{position:relative;width:100%;padding:28px 22px 24px;border:none!important;border-radius:0!important;background:#fff!important;box-shadow:none!important;opacity:0;transform:translateY(18px);transition:all .45s ease;z-index:1}
+.intro-kicker{font-size:11px;letter-spacing:.22em;color:#8d98a5;margin-bottom:10px;text-transform:uppercase}
+#registration .intro-card h1{margin:0 0 10px;text-align:left;color:#10151d;letter-spacing:.02em;font-size:30px}
+#registration .intro-card p{text-align:left;color:#5e6976;margin:0 0 18px;line-height:1.55}
+#registration .intro-card input{background:#f6f8fb;border:1px solid #e1e7ef;color:#111;margin:8px 0;border-radius:16px;padding:15px 16px}
+#registration .intro-card .apps-action,#registration #saveProfile{background:#151c28;color:#fff;border:1px solid #151c28;border-radius:16px;min-height:54px}
+#registration .intro-card #skipRegistration{background:#eef3f8;color:#2d3744;border-color:#e3eaf2}
+.birth-grid{display:grid;grid-template-columns:1fr 1fr 1.2fr;gap:8px}
+.intro-shell.intro-play .intro-dot--core{animation:introCoreMorph 1.2s ease forwards}
+.intro-shell.intro-phase-2 .intro-blob{opacity:1;transform:scale(1) rotate(-8deg);border-radius:32px 28px 35px 26px / 28px 36px 26px 34px;animation:introBlobFloat 2.4s ease-in-out infinite}
+.intro-shell.intro-phase-2 .intro-logo,.intro-shell.intro-phase-2 .intro-tag{opacity:1;transform:translateY(0)}
+.intro-shell.intro-finished .intro-splash{opacity:0;transform:translateY(-16px);pointer-events:none}
+.intro-shell.intro-finished .intro-card{opacity:1;transform:translateY(0)}
+@keyframes introPulse{0%,100%{transform:scale(1)}50%{transform:scale(.86)}}
+@keyframes introOrbitA{from{transform:rotate(0deg) translateY(-28px)}to{transform:rotate(360deg) translateY(-28px)}}
+@keyframes introOrbitB{from{transform:rotate(60deg) translateY(-38px)}to{transform:rotate(420deg) translateY(-38px)}}
+@keyframes introOrbitC{from{transform:rotate(160deg) translateY(-21px)}to{transform:rotate(520deg) translateY(-21px)}}
+@keyframes introCoreMorph{0%{width:20px;height:20px;border-radius:999px}45%{width:28px;height:28px;border-radius:14px}100%{width:18px;height:18px;border-radius:999px}}
+@keyframes introBlobFloat{0%,100%{transform:scale(1) rotate(-8deg)}50%{transform:scale(1.06) rotate(10deg)}}
+@media(max-width:420px){.intro-shell{min-height:calc(100vh - 36px);border-radius:28px}.birth-grid{grid-template-columns:1fr 1fr 1fr}}
