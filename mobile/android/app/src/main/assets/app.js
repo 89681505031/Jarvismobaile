@@ -85,8 +85,10 @@ $('backgroundWake').onchange=e=>{
   }
   // The native side may reject the request if microphone, model, or visible
   // notification permission is absent; onJarvisBackgroundWakeChanged restores UI.
+  // Keep the user's chosen value visible while Android completes permission
+  // checks / foreground-service startup. The native callback below is the
+  // authoritative correction if Android actually rejects the request.
   window.AndroidJarvis.setBackgroundWakeEnabled(!!e.target.checked);
-  scheduleSettingSync();
 };
 window.onJarvisPendingBackgroundCommand=text=>{
   command.value=String(text||'').slice(0,240);
