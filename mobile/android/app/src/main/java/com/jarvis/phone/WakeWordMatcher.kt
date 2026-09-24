@@ -14,7 +14,7 @@ object WakeWordMatcher {
         "астра" to "Astra", "astra" to "Astra",
         "луна" to "Luna", "luna" to "Luna",
         "терра" to "Terra", "terra" to "Terra",
-        "сайбер" to "Cyber", "кибер" to "Cyber", "cyber" to "Cyber"
+        "сайбер" to "Кибер", "кибер" to "Кибер", "cyber" to "Кибер"
     )
     private val greetings = Regex("^(эй|привет|слушай|окей|okay|hey|ok)[\\s,!.?]+")
     private val leadingName = Regex("^[\\p{L}]+")
