@@ -773,11 +773,17 @@ class MainActivity : Activity() {
     }
 
     private fun emitVoiceAmplitude(level: Float) {
-        if (!activityResumed || !isSpeaking) return
+        if (!activityResumed || (!isSpeaking && level > 0f)) return
         val now = SystemClock.elapsedRealtime()
         if (level > 0f && now - lastVoiceAmplitudeAt < 32L) return
         lastVoiceAmplitudeAt = now
-        voiceEvent("onJarvisVoiceAmplitude", level.coerceIn(0f, 1f))
+        val safe = level.coerceIn(0f, 1f)
+        mainHandler.post {
+            if (!isFinishing && !isDestroyed && activityResumed &&
+                (isSpeaking || safe == 0f)) {
+                voiceEvent("onJarvisVoiceAmplitude", safe)
+            }
+        }
     }
 
     private fun pcmAmplitude(audio: ByteArray, encoding: Int): Float {
