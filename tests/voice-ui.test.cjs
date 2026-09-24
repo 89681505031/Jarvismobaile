@@ -12,7 +12,7 @@ function load() {
     querySelector(tag) { return this.children.find(child => child.tag === tag); }
   }
   const elements = new Map();
-  const calls = { command: [], speak: [], start: 0, windows: 0, diagnostics: 0, wakeSettings: [], backgroundSettings: [] };
+  const calls = { command: [], speak: [], start: 0, windows: 0, diagnostics: 0, wakeSettings: [], backgroundSettings: [], minimize: 0 };
   const context = { document: { getElementById(id) {
     if (!elements.has(id)) elements.set(id, new Element()); return elements.get(id);
   }, createElement(tag) { const e = new Element(); e.tag = tag; return e; }, querySelectorAll() { return []; } },
@@ -22,6 +22,7 @@ function load() {
     diagnoseMicrophone() { calls.diagnostics++; },
     getBackgroundWakeEnabled() { return false; },
     setBackgroundWakeEnabled(enabled) { calls.backgroundSettings.push(enabled); },
+    minimizeToBackground() { calls.minimize++; return 'Перехожу в фоновый режим.'; },
     getWakeModeEnabled() { return false; },
     setWakeModeEnabled(enabled) { calls.wakeSettings.push(enabled); },
     setPersona() {}, listApps() { return JSON.stringify([{ label: '<img src=x onerror=alert(1)>', packageName: 'app', allowed: false }]); }
@@ -263,4 +264,11 @@ test('native location result is displayed without exposing coordinates in UI',()
   assert.equal(elements.get('allowLocation').disabled,true);
   context.window.onJarvisLocalInfo('weather','Погода по приблизительному местоположению — город. Сейчас 5 °C.');
   assert.match(elements.get('message').textContent,/Сейчас 5/);
+});
+
+test('explicit tray button asks native Activity to move task to background', () => {
+  const { calls, elements } = load();
+  elements.get('minimizeJarvis').onclick();
+  assert.equal(calls.minimize, 1);
+  assert.match(elements.get('backgroundWakeStatus').textContent, /фоновый режим/i);
 });
