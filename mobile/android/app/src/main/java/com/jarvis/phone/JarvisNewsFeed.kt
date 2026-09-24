@@ -9,6 +9,7 @@ class JarvisNewsFeed {
     fun fetchMainHeadlines(): List<String> {
         val feeds = listOf(
             "https://news.google.com/rss?hl=ru&gl=RU&ceid=RU:ru",
+            "https://news.google.com/rss?hl=ru&gl=PL&ceid=PL:ru",
             "https://news.google.com/rss?hl=ru&gl=US&ceid=US:ru"
         )
         var lastError: Exception? = null
