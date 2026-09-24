@@ -45,12 +45,16 @@ object BackgroundInfoPolicy {
             text.contains("моём городе") ||
             text.contains("по месту")
 
-        if (!localNews && text.contains("новост") && (
-                text == "новости" ||
-                text.contains("главн") ||
-                text.contains("последн") ||
-                text.contains("сводк") ||
-                text.startsWith("расскажи")
+        // Any ordinary request containing "новост..." means the fresh main
+        // news feed unless the user clearly asked for location-based news.
+        // This intentionally covers natural ASR phrases such as:
+        // "какие новости", "что в новостях", "новости на сегодня".
+        if (!localNews && text.contains("новост")) return Kind.MAIN_NEWS
+
+        if (!localNews && (
+                text == "что нового в мире" ||
+                text == "что нового сегодня" ||
+                text == "что происходит в мире"
             )
         ) return Kind.MAIN_NEWS
 
