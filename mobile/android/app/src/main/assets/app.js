@@ -3,7 +3,10 @@ const $=id=>document.getElementById(id);const message=$('message'),command=$('co
 const personas=[['J.A.R.V.I.S.','Координация и общий помощник'],['Astra','Творчество и идеи'],['Luna','Анализ и знания'],['Terra','Практические задачи'],['Cyber','Безопасность и защита']];
 const wakeWords=['джарвис','jarvis','астра','astra','луна','luna','сайбер','кибер','cyber','терра','terra'];
 const activationPersonas={'джарвис':'J.A.R.V.I.S.','jarvis':'J.A.R.V.I.S.','астра':'Astra','astra':'Astra','луна':'Luna','luna':'Luna','сайбер':'Cyber','кибер':'Cyber','cyber':'Cyber','терра':'Terra','terra':'Terra'};
-function showMessage(t){message.textContent=t||''}function activatePersona(word){const persona=activationPersonas[(word||'').toLowerCase()];if(!persona)return;state.persona=persona;localStorage.setItem('jarvisPersona',persona);window.AndroidJarvis?.setPersona?.(persona);showMessage('Активирован персонаж: '+persona)}function render(){modeButton.textContent=state.mode==='phone'?'📱 PHONE MODE':'🖥️ PC MODE';modeNav.textContent=state.mode==='phone'?'📱 Телефон':'🖥️ ПК';showMessage('Готов к работе, '+(localStorage.getItem('jarvisName')||'сэр')+'. Персонаж: '+state.persona)}
+function showMessage(t){message.textContent=t||''}
+function deferUi(fn,ms){
+  if(typeof window!=='undefined'&&typeof window.setTimeout==='function')window.setTimeout(fn,ms);
+}function activatePersona(word){const persona=activationPersonas[(word||'').toLowerCase()];if(!persona)return;state.persona=persona;localStorage.setItem('jarvisPersona',persona);window.AndroidJarvis?.setPersona?.(persona);showMessage('Активирован персонаж: '+persona)}function render(){modeButton.textContent=state.mode==='phone'?'📱 PHONE MODE':'🖥️ PC MODE';modeNav.textContent=state.mode==='phone'?'📱 Телефон':'🖥️ ПК';showMessage('Готов к работе, '+(localStorage.getItem('jarvisName')||'сэр')+'. Персонаж: '+state.persona)}
 function sendCommand(v){const text=(v||command.value).trim();if(!text)return;state.waitingForCommand=false;window.AndroidJarvis?.stopListening?.();showMessage('Выполняю: «'+text+'»');try{const r=window.AndroidJarvis?.command(text);if(r){showMessage(r);const asyncNative=/^(Получаю свежую сводку новостей|Получаю местную новостную сводку|Получаю погоду по примерному местоположению|Запрашиваю доступ к местоположению|Читаю последнее сообщение WhatsApp|Открываю WhatsApp)/i.test(r);if(!asyncNative){window.AndroidJarvis?.speak(r)}}else showMessage('Обрабатываю запрос…')}catch(e){showMessage('Ошибка: '+e.message)}command.value=''}
 function onSpeechState(phase,text){state.waitingForCommand=['starting','listening','processing','permission'].includes(phase);$('micStatus').textContent=text||'';orbButton.setAttribute('aria-busy',state.waitingForCommand?'true':'false');if(phase==='listening')state.waitingForCommand=true;if(!state.waitingForCommand)$('micLevel').value=0;}
 window.onJarvisSpeechState=onSpeechState;window.onJarvisSpeechLevel=v=>{$('micLevel').value=Math.max(0,Math.min(100,(Number(v)+2)*8));};
@@ -55,8 +58,8 @@ function syncSettingSwitches(){
   }catch(_){}
 }
 function scheduleSettingSync(){
-  setTimeout(syncSettingSwitches,80);
-  setTimeout(syncSettingSwitches,350);
+  deferUi(syncSettingSwitches,80);
+  deferUi(syncSettingSwitches,350);
 }
 syncSettingSwitches();
 window.onJarvisPermissionsStatus=(phase,text)=>{
@@ -188,7 +191,7 @@ function populateSkills(){
     input.type='checkbox';input.checked=!!item.enabled;
     input.onchange=e=>{
       if(!window.AndroidJarvis?.enableSkill?.(item.id,!!e.target.checked))e.target.checked=!e.target.checked;
-      setTimeout(populateSkills,150);
+      deferUi(populateSkills,150);
     };
     row.appendChild(span);row.appendChild(input);$('skillCatalog').appendChild(row);
   });
@@ -273,7 +276,7 @@ $('skipRegistration').onclick=()=>{localStorage.setItem('jarvisOnboarded','1');$
   };
   brainMemory.onchange=e=>{
     window.AndroidJarvis?.setGigaBrainMemory?.(!!e.target.checked);
-    setTimeout(refresh,150);
+    deferUi(refresh,150);
   };
   share.onchange=e=>{
     window.AndroidJarvis?.setGigaShareMessages?.(!!e.target.checked);
