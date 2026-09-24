@@ -12,6 +12,7 @@
   const label=document.getElementById('orbModeLabel');
   const avatar=document.getElementById('holoAvatar');
   const face=document.getElementById('holoFace');
+  const eyeFace=document.getElementById('holoEyeFace');
   const mouthFace=document.getElementById('holoMouthFace');
   const personaName=document.getElementById('holoPersonaName');
   if(!orb||!area||!label)return;
@@ -53,6 +54,10 @@
     if(face){
       if(face.getAttribute?.('src')!==src)face.setAttribute('src',src);
       face.style.left='0';
+    }
+    if(eyeFace){
+      if(eyeFace.getAttribute?.('src')!==src)eyeFace.setAttribute('src',src);
+      eyeFace.style.left='0';
     }
     if(mouthFace){
       if(mouthFace.getAttribute?.('src')!==src)mouthFace.setAttribute('src',src);
