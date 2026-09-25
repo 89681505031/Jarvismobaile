@@ -605,6 +605,7 @@ body::after{
   animation:holoSweep 3.15s linear infinite;
 }
 .holo-persona-name{
+  display:none!important;
   position:absolute;
   z-index:9;
   top:8%;
