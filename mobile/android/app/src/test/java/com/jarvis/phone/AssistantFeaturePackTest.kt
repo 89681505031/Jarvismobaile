@@ -20,6 +20,7 @@ class AssistantFeaturePackTest {
     @Test fun offlineKnowledgeNeverPretendsToBeLiveWebOrAI() {
         assertNotNull(OfflineKnowledge.answer("сколько времени"))
         assertNotNull(OfflineKnowledge.answer("какая сегодня дата"))
+        assertNotNull(OfflineKnowledge.answer("какой сейчас год"))
         assertNull(OfflineKnowledge.answer("какая погода в Москве"))
         assertNull(OfflineKnowledge.answer("кто мне написал"))
     }
