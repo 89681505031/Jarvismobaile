@@ -1,5 +1,6 @@
 package com.jarvis.phone
 
+import android.app.ActivityOptions
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
@@ -50,10 +51,32 @@ class JarvisBootReceiver : BroadcastReceiver() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
+        if (intent.action == Intent.ACTION_MY_PACKAGE_REPLACED) {
+            try {
+                if (android.os.Build.VERSION.SDK_INT >= 34) {
+                    val options = ActivityOptions.makeBasic().apply {
+                        setPendingIntentBackgroundActivityStartMode(
+                            ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOWED
+                        )
+                    }
+                    pendingIntent.send(context, 0, null, null, null, null, options.toBundle())
+                } else {
+                    pendingIntent.send()
+                }
+            } catch (_: Exception) {
+                // Notification below remains the fallback when the device blocks
+                // automatic activity launch after a package replacement.
+            }
+        }
+
+        val updated = intent.action == Intent.ACTION_MY_PACKAGE_REPLACED
         val notification = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(R.drawable.jarvis_icon)
-            .setContentTitle("J.A.R.V.I.S. готов")
-            .setContentText("Нажмите, чтобы открыть JARVIS и восстановить голосовое управление")
+            .setContentTitle(if (updated) "J.A.R.V.I.S. обновлён" else "J.A.R.V.I.S. готов")
+            .setContentText(
+                if (updated) "Новая версия установлена. Нажмите, если JARVIS не открылся автоматически."
+                else "Нажмите, чтобы открыть JARVIS и восстановить голосовое управление"
+            )
             .setContentIntent(pendingIntent)
             .setAutoCancel(true)
             .build()
