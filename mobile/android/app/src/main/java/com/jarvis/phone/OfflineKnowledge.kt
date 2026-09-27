@@ -43,6 +43,7 @@ object OfflineKnowledge {
             return "Сегодня " + SimpleDateFormat("d MMMM yyyy", Locale("ru", "RU")).format(Date(now))
         }
 
+        val hasYearWord = normalized.split(' ').any { it == "год" }
         val asksYear =
             normalized == "год" ||
             normalized == "какой год" ||
@@ -50,10 +51,9 @@ object OfflineKnowledge {
             normalized == "сейчас какой год" ||
             normalized == "какой текущий год" ||
             normalized == "текущий год" ||
-            (normalized.contains("год") && (
+            (hasYearWord && (
                 normalized.contains("сейчас") ||
-                normalized.contains("текущ") ||
-                normalized.contains("сегодня")
+                normalized.contains("текущ")
             ))
 
         if (asksYear) {
