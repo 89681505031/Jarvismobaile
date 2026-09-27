@@ -43,6 +43,23 @@ object OfflineKnowledge {
             return "Сегодня " + SimpleDateFormat("d MMMM yyyy", Locale("ru", "RU")).format(Date(now))
         }
 
+        val asksYear =
+            normalized == "год" ||
+            normalized == "какой год" ||
+            normalized == "какой сейчас год" ||
+            normalized == "сейчас какой год" ||
+            normalized == "какой текущий год" ||
+            normalized == "текущий год" ||
+            (normalized.contains("год") && (
+                normalized.contains("сейчас") ||
+                normalized.contains("текущ") ||
+                normalized.contains("сегодня")
+            ))
+
+        if (asksYear) {
+            return "Сейчас " + SimpleDateFormat("yyyy", Locale("ru", "RU")).format(Date(now)) + " год."
+        }
+
         return when (normalized) {
             "что умеешь без интернета" ->
                 "Без интернета доступны время, дата, фонарик, громкость, напоминания и управление музыкой."
