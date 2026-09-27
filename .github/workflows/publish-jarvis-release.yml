@@ -1,0 +1,88 @@
+name: Publish signed JARVIS update
+
+on:
+  push:
+    branches:
+      - fix/background-handoff-live-news-v2
+      - main
+    paths:
+      - 'mobile/android/**'
+      - '.github/workflows/publish-jarvis-release.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: jarvis-signed-release
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+
+      - name: Require persistent JARVIS signing key
+        env:
+          JARVIS_DEBUG_KEYSTORE_B64: ${{ secrets.JARVIS_DEBUG_KEYSTORE_B64 }}
+        run: |
+          if [ -z "$JARVIS_DEBUG_KEYSTORE_B64" ]; then
+            echo "::error::JARVIS_DEBUG_KEYSTORE_B64 is required for in-app updates."
+            exit 1
+          fi
+          mkdir -p ~/.android
+          printf '%s' "$JARVIS_DEBUG_KEYSTORE_B64" | base64 --decode > ~/.android/debug.keystore
+          chmod 600 ~/.android/debug.keystore
+
+      - name: Set Android release version
+        run: |
+          COUNT=$(git rev-list --count "$GITHUB_SHA")
+          test "$COUNT" -gt 0
+          echo "JARVIS_VERSION_CODE=$((100000 + COUNT))" >> "$GITHUB_ENV"
+          echo "JARVIS_VERSION_NAME=0.4.$COUNT" >> "$GITHUB_ENV"
+
+      - name: Test and build signed update APK
+        working-directory: mobile/android
+        run: gradle --no-daemon testDebugUnitTest lintDebug assembleDebug
+
+      - name: Verify update package and signature
+        run: |
+          cp mobile/android/app/build/outputs/apk/debug/app-debug.apk Jarvis-Mobile-signed.apk
+          APKSIGNER=$(find "$ANDROID_HOME/build-tools" -type f -name apksigner -print | sort -V | tail -n 1)
+          test -n "$APKSIGNER"
+          "$APKSIGNER" verify --verbose --print-certs Jarvis-Mobile-signed.apk
+          test "$(stat -c%s Jarvis-Mobile-signed.apk)" -lt $((100 * 1024 * 1024))
+
+      - name: Publish GitHub Release used by in-app updater
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="v$JARVIS_VERSION_NAME"
+          TITLE="JARVIS Mobile $JARVIS_VERSION_NAME"
+          NOTES="Подписанное обновление JARVIS Mobile. versionCode=$JARVIS_VERSION_CODE. Установка выполняется только поверх APK с тем же ключом подписи."
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" Jarvis-Mobile-signed.apk --clobber
+          else
+            gh release create "$TAG" Jarvis-Mobile-signed.apk \
+              --target "$GITHUB_SHA" \
+              --title "$TITLE" \
+              --notes "$NOTES"
+          fi
+
+      - name: Release summary
+        run: |
+          echo "Published: Jarvis-Mobile-signed.apk" >> "$GITHUB_STEP_SUMMARY"
+          echo "Version: $JARVIS_VERSION_NAME ($JARVIS_VERSION_CODE)" >> "$GITHUB_STEP_SUMMARY"

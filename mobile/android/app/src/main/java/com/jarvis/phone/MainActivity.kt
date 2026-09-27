@@ -698,6 +698,7 @@ class MainActivity : Activity() {
         else resumeForegroundMicrophone()
         if (backgroundWakeEnabled && wakeModeEnabled) startBackgroundServiceIfEligible()
         deliverBackgroundCommand()
+        updates.resumePendingInstallIfAllowed()
     }
 
     private fun resumeForegroundMicrophone() {
