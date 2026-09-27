@@ -20,6 +20,7 @@ import java.util.concurrent.Executors
 class JarvisSignedUpdates(private val context: Context, private val report: (String) -> Unit) {
     private val io = Executors.newSingleThreadExecutor()
     private val main = android.os.Handler(android.os.Looper.getMainLooper())
+    private val maxApkBytes = 250L * 1024 * 1024
     @Volatile private var busy = false
     @Volatile private var pendingVerifiedApk: File? = null
 
@@ -133,7 +134,7 @@ class JarvisSignedUpdates(private val context: Context, private val report: (Str
                     try {
                         if (connection.responseCode != 200 || connection.url.protocol != "https") error("HTTPS-загрузка не удалась")
                         val size = connection.contentLengthLong
-                        if (size > 100L * 1024 * 1024) error("APK слишком большой")
+                        if (size > maxApkBytes) error("APK слишком большой")
                         connection.inputStream.use { input ->
                             file.outputStream().use { output ->
                                 val buf = ByteArray(32 * 1024)
@@ -143,7 +144,7 @@ class JarvisSignedUpdates(private val context: Context, private val report: (Str
                                     val n = input.read(buf)
                                     if (n < 0) break
                                     total += n
-                                    if (total > 100L * 1024 * 1024) error("APK слишком большой")
+                                    if (total > maxApkBytes) error("APK слишком большой")
                                     output.write(buf, 0, n)
                                     if (size > 0L) {
                                         val percent = ((total * 100L) / size).toInt().coerceIn(0, 100)
