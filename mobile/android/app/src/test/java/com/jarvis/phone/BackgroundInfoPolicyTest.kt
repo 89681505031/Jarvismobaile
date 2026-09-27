@@ -9,6 +9,8 @@ class BackgroundInfoPolicyTest {
         assertEquals(BackgroundInfoPolicy.Kind.TIME, BackgroundInfoPolicy.classify("Сколько сейчас времени?"))
         assertEquals(BackgroundInfoPolicy.Kind.TIME, BackgroundInfoPolicy.classify("Скажи который час!"))
         assertEquals(BackgroundInfoPolicy.Kind.DATE, BackgroundInfoPolicy.classify("Какая сегодня дата?"))
+        assertEquals(BackgroundInfoPolicy.Kind.YEAR, BackgroundInfoPolicy.classify("Какой сейчас год?"))
+        assertEquals(BackgroundInfoPolicy.Kind.YEAR, BackgroundInfoPolicy.classify("Сейчас какой год"))
     }
 
     @Test fun mainNewsWorksInBackgroundButLocationNewsStaysForegroundOnly() {
@@ -24,10 +26,12 @@ class BackgroundInfoPolicyTest {
         assertNull(BackgroundInfoPolicy.classify("погода"))
     }
 
-    @Test fun timeAnswerSupportsShortNaturalCommands() {
-        val fixed = 0L
+    @Test fun timeAndYearAnswersSupportShortNaturalCommands() {
+        val fixed = 1_750_000_000_000L
         assertNotNull(OfflineKnowledge.answer("время", fixed))
         assertNotNull(OfflineKnowledge.answer("сколько сейчас времени?", fixed))
         assertNotNull(OfflineKnowledge.answer("который сейчас час", fixed))
+        assertEquals("Сейчас 2025 год.", OfflineKnowledge.answer("какой сейчас год?", fixed))
+        assertNull(OfflineKnowledge.answer("в каком году вышел фильм?", fixed))
     }
 }
