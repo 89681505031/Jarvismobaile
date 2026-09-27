@@ -37,6 +37,7 @@ object BackgroundInfoPolicy {
             (text.contains("число") && text.contains("сегодня"))
         ) return Kind.DATE
 
+        val hasYearWord = text.split(' ').any { it == "год" }
         if (
             text == "год" ||
             text == "какой год" ||
@@ -44,10 +45,9 @@ object BackgroundInfoPolicy {
             text == "сейчас какой год" ||
             text == "какой текущий год" ||
             text == "текущий год" ||
-            (text.contains("год") && (
+            (hasYearWord && (
                 text.contains("сейчас") ||
-                text.contains("текущ") ||
-                text.contains("сегодня")
+                text.contains("текущ")
             ))
         ) return Kind.YEAR
 
