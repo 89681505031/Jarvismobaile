@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
+import android.provider.Settings
 import androidx.core.content.FileProvider
 import org.json.JSONObject
 import java.io.File
@@ -20,6 +21,7 @@ class JarvisSignedUpdates(private val context: Context, private val report: (Str
     private val io = Executors.newSingleThreadExecutor()
     private val main = android.os.Handler(android.os.Looper.getMainLooper())
     @Volatile private var busy = false
+    @Volatile private var pendingVerifiedApk: File? = null
 
     /**
      * Checks release metadata at most once per 24 hours when the app is opened.
@@ -136,12 +138,20 @@ class JarvisSignedUpdates(private val context: Context, private val report: (Str
                             file.outputStream().use { output ->
                                 val buf = ByteArray(32 * 1024)
                                 var total = 0L
+                                var lastPercent = -10
                                 while (true) {
                                     val n = input.read(buf)
                                     if (n < 0) break
                                     total += n
                                     if (total > 100L * 1024 * 1024) error("APK слишком большой")
                                     output.write(buf, 0, n)
+                                    if (size > 0L) {
+                                        val percent = ((total * 100L) / size).toInt().coerceIn(0, 100)
+                                        if (percent >= lastPercent + 10 || percent == 100) {
+                                            lastPercent = percent
+                                            announce("Скачиваю обновление: $percent%")
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -176,18 +186,8 @@ class JarvisSignedUpdates(private val context: Context, private val report: (Str
                         announce("Уже установлена актуальная версия.")
                         return@execute
                     }
-                    val content = FileProvider.getUriForFile(
-                        context, context.packageName + ".fileprovider", file
-                    )
-                    main.post {
-                        report("APK проверен. Android попросит подтвердить установку.")
-                        val intent = Intent(Intent.ACTION_VIEW).apply {
-                            setDataAndType(content, "application/vnd.android.package-archive")
-                            this.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_GRANT_READ_URI_PERMISSION
-                        }
-                        try { context.startActivity(intent) }
-                        catch (_: Exception) { report("Разрешите установку обновлений для JARVIS в Android.") }
-                    }
+                    pendingVerifiedApk = file
+                    main.post { launchInstaller(file) }
                 } catch (e: Exception) {
                     file.delete()
                     throw e
@@ -198,6 +198,56 @@ class JarvisSignedUpdates(private val context: Context, private val report: (Str
                 busy = false
             }
         }
+    }
+
+    /**
+     * Called when MainActivity becomes visible again. If Android first required
+     * the user to trust JARVIS as an install source, continue with the already
+     * verified APK instead of downloading it a second time.
+     */
+    fun resumePendingInstallIfAllowed() {
+        val file = pendingVerifiedApk ?: return
+        if (!file.isFile) {
+            pendingVerifiedApk = null
+            return
+        }
+        if (android.os.Build.VERSION.SDK_INT < 26 || context.packageManager.canRequestPackageInstalls()) {
+            main.post { launchInstaller(file) }
+        }
+    }
+
+    private fun launchInstaller(file: File) {
+        if (!file.isFile) {
+            pendingVerifiedApk = null
+            report("Файл обновления больше недоступен. Запустите проверку ещё раз.")
+            return
+        }
+        if (android.os.Build.VERSION.SDK_INT >= 26 &&
+            !context.packageManager.canRequestPackageInstalls()
+        ) {
+            report("Разрешите JARVIS устанавливать обновления, затем вернитесь в приложение.")
+            val settings = Intent(
+                Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
+                Uri.parse("package:${context.packageName}")
+            ).apply { flags = Intent.FLAG_ACTIVITY_NEW_TASK }
+            try { context.startActivity(settings) }
+            catch (_: Exception) {
+                report("Откройте настройки Android и разрешите установку приложений из JARVIS.")
+            }
+            return
+        }
+
+        val content = FileProvider.getUriForFile(
+            context, context.packageName + ".fileprovider", file
+        )
+        val intent = Intent(Intent.ACTION_VIEW).apply {
+            setDataAndType(content, "application/vnd.android.package-archive")
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_GRANT_READ_URI_PERMISSION
+            putExtra(Intent.EXTRA_NOT_UNKNOWN_SOURCE, true)
+        }
+        report("Новая версия проверена. Подтвердите установку Android; после установки JARVIS попробует открыться сам.")
+        try { context.startActivity(intent) }
+        catch (_: Exception) { report("Не удалось открыть установщик Android.") }
     }
 
     private fun announce(value: String) = main.post { report(value) }

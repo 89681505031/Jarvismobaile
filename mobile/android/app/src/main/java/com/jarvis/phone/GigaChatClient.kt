@@ -7,6 +7,9 @@ import java.net.HttpURLConnection
 import java.net.SocketTimeoutException
 import java.net.URL
 import java.security.MessageDigest
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import java.util.UUID
 import javax.net.ssl.SSLHandshakeException
 
@@ -90,7 +93,13 @@ class GigaChatClient(private val context: Context) {
         persona: String, memoryContext: String, recentTurns: List<Pair<String, String>>
     ): String {
         val messages = JSONArray()
-        val system = GigaChatBrainPolicy.systemPrompt(persona) + if (memoryContext.isBlank()) ""
+        val deviceTime = SimpleDateFormat("yyyy-MM-dd HH:mm:ss XXX", Locale.ROOT)
+            .format(Date(System.currentTimeMillis()))
+        val liveDeviceContext = "\n\nТекущие дата и время устройства Android: $deviceTime. " +
+            "Для вопросов о текущем годе, дате или времени используй именно эти данные, " +
+            "а не сведения из обучающих данных модели."
+        val system = GigaChatBrainPolicy.systemPrompt(persona) + liveDeviceContext +
+            if (memoryContext.isBlank()) ""
             else "\n\nКонтекст, который пользователь разрешил использовать:\n" +
                 memoryContext.take(12000)
         messages.put(message("system", system))

@@ -4,7 +4,7 @@ import java.util.Locale
 
 /** Small, auditable set of information requests allowed in minimized mode. */
 object BackgroundInfoPolicy {
-    enum class Kind { TIME, DATE, MAIN_NEWS }
+    enum class Kind { TIME, DATE, YEAR, MAIN_NEWS }
 
     fun normalize(raw: String): String =
         raw.trim()
@@ -36,6 +36,20 @@ object BackgroundInfoPolicy {
             (text.contains("дат") && (text.contains("какая") || text.contains("скажи") || text.contains("сегодня"))) ||
             (text.contains("число") && text.contains("сегодня"))
         ) return Kind.DATE
+
+        val hasYearWord = text.split(' ').any { it == "год" }
+        if (
+            text == "год" ||
+            text == "какой год" ||
+            text == "какой сейчас год" ||
+            text == "сейчас какой год" ||
+            text == "какой текущий год" ||
+            text == "текущий год" ||
+            (hasYearWord && (
+                text.contains("сейчас") ||
+                text.contains("текущ")
+            ))
+        ) return Kind.YEAR
 
         // Local/place-based news stays foreground-only because location is
         // intentionally not available to the minimized microphone service.

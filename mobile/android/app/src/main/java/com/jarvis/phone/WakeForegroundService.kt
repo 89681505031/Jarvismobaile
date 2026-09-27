@@ -301,7 +301,8 @@ class WakeForegroundService : Service() {
         memory.rememberSelfDisclosure(phrase)
         when (BackgroundInfoPolicy.classify(phrase)) {
             BackgroundInfoPolicy.Kind.TIME,
-            BackgroundInfoPolicy.Kind.DATE -> {
+            BackgroundInfoPolicy.Kind.DATE,
+            BackgroundInfoPolicy.Kind.YEAR -> {
                 val response = OfflineKnowledge.answer(phrase)
                     ?: "Не удалось определить время или дату."
                 notificationText = response
