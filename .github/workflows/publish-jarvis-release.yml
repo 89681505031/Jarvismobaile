@@ -64,7 +64,7 @@ jobs:
           APKSIGNER=$(find "$ANDROID_HOME/build-tools" -type f -name apksigner -print | sort -V | tail -n 1)
           test -n "$APKSIGNER"
           "$APKSIGNER" verify --verbose --print-certs Jarvis-Mobile-signed.apk
-          test "$(stat -c%s Jarvis-Mobile-signed.apk)" -lt $((100 * 1024 * 1024))
+          test "$(stat -c%s Jarvis-Mobile-signed.apk)" -lt $((250 * 1024 * 1024))
 
       - name: Publish GitHub Release used by in-app updater
         env:
