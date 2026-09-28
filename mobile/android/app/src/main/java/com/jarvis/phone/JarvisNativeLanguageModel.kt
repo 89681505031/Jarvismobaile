@@ -53,9 +53,15 @@ class JarvisNativeLanguageModel(
                     loadedPath = file.absolutePath
                 }
 
+                val profileId = modelStore.info().profileId
+                val preparedPrompt = if (profileId.startsWith("qwen3-")) {
+                    prompt.trimEnd() + "\n/no_think"
+                } else {
+                    prompt
+                }
                 val output = cleanOutput(
                     nativeGenerate(
-                        prompt = prompt.take(18_000),
+                        prompt = preparedPrompt.take(18_000),
                         maxNewTokens = maxNewTokens.coerceIn(32, 1024)
                     ).orEmpty()
                 )
