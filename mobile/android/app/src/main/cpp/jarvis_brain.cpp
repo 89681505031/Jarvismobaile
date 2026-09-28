@@ -220,7 +220,6 @@ Java_com_jarvis_phone_JarvisNativeLanguageModel_nativeLoadModel(
 
     llama_model_params params = llama_model_default_params();
     params.n_gpu_layers = 0;
-    params.use_mmap = true;
 
     g_model = llama_model_load_from_file(path.c_str(), params);
     if (g_model == nullptr) {
