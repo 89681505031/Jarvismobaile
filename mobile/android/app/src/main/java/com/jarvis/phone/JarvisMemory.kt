@@ -218,11 +218,19 @@ class JarvisMemory(context: Context) {
     private fun containsSecret(text: String): Boolean {
         val value = normalize(text)
         val secretMarkers = listOf(
-            "парол", "пин-код", "pin-код", " cvv", " cvc", "api key",
-            "authorization key", "токен", "одноразовый код", "код из смс",
+            "парол", "password", "passcode", "пин-код", "pin-код", " cvv", " cvc",
+            "api key", "api-key", "access key", "authorization key", "bearer ",
+            "client secret", "private key", "secret key", "токен", " token",
+            "одноразовый код", "код из смс", "verification code", "otp",
             "номер карты", "секретный ключ"
         )
-        return secretMarkers.any { value.contains(it) }
+        if (secretMarkers.any { value.contains(it) }) return true
+
+        // Avoid durable storage of likely one-time verification codes when the
+        // surrounding text explicitly talks about a code.
+        val mentionsCode = value.contains("код") || value.contains("code")
+        val shortNumber = Regex("(?<!\\d)\\d{4,8}(?!\\d)")
+        return mentionsCode && shortNumber.containsMatchIn(value)
     }
 
     fun forgetFact(query: String): Boolean = synchronized(lock) {
