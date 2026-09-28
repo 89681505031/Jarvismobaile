@@ -8,12 +8,11 @@ import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.label.ImageLabeling
 import com.google.mlkit.vision.label.defaults.ImageLabelerOptions
 import com.google.mlkit.vision.text.TextRecognition
-import com.google.mlkit.vision.text.cyrillic.CyrillicTextRecognizerOptions
 import com.google.mlkit.vision.text.latin.TextRecognizerOptions
 
 /**
  * Explicit camera/gallery choice only. Images stay on device.
- * Local ML Kit extracts scene labels, Latin/Cyrillic text and QR/barcodes.
+ * Local ML Kit extracts scene labels, text and QR/barcodes.
  */
 class JarvisVision(private val context: Context) {
     fun fromPhoto(uri: Uri, result: (String) -> Unit) {
@@ -28,7 +27,6 @@ class JarvisVision(private val context: Context) {
     private fun describe(image: InputImage, result: (String) -> Unit) {
         val labels = ImageLabeling.getClient(ImageLabelerOptions.DEFAULT_OPTIONS)
         val latin = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
-        val cyrillic = TextRecognition.getClient(CyrillicTextRecognizerOptions.Builder().build())
         val barcodes = BarcodeScanning.getClient()
 
         var complete = 0
@@ -39,7 +37,7 @@ class JarvisVision(private val context: Context) {
         @Synchronized
         fun finish() {
             complete++
-            if (complete != 4) return
+            if (complete != 3) return
             val output = mutableListOf<String>()
             if (objects.isNotBlank()) output += objects
             if (texts.isNotEmpty()) output += "Распознанный текст: " + texts.joinToString(" · ").take(1800)
@@ -63,13 +61,6 @@ class JarvisVision(private val context: Context) {
             it.text.trim().takeIf(String::isNotBlank)?.let { value -> texts += value.take(1200) }
         }.addOnCompleteListener {
             latin.close()
-            finish()
-        }
-
-        cyrillic.process(image).addOnSuccessListener {
-            it.text.trim().takeIf(String::isNotBlank)?.let { value -> texts += value.take(1200) }
-        }.addOnCompleteListener {
-            cyrillic.close()
             finish()
         }
 
