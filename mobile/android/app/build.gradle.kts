@@ -53,4 +53,6 @@ dependencies {
     implementation("net.java.dev.jna:jna:5.18.1@aar")
     implementation("com.google.mlkit:image-labeling:17.0.9")
     implementation("com.google.mlkit:text-recognition:16.0.1")
+    implementation("com.google.mlkit:text-recognition-cyrillic:16.0.1")
+    implementation("com.google.mlkit:barcode-scanning:17.3.0")
 }
