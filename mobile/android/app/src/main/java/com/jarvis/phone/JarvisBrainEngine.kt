@@ -163,6 +163,19 @@ class JarvisBrainEngine(
             }
         }
 
+        topicMemoryQuery(normalized)?.let { topic ->
+            val turns = memory.relevantDialogues(topic, 5)
+            if (turns.isEmpty()) {
+                return "Я не нашёл в долговременной памяти разговоров по теме «$topic»."
+            }
+            val snippets = turns.mapIndexed { index, turn ->
+                val user = turn.first.replace(Regex("\\s+"), " ").take(220)
+                val assistant = turn.second.replace(Regex("\\s+"), " ").take(260)
+                "${index + 1}. Вы: $user — JARVIS: $assistant"
+            }
+            return "По теме «$topic» я помню:\n" + snippets.joinToString("\n")
+        }
+
         if (
             normalized.contains("что мы обсуждали") ||
             normalized.contains("о чем мы говорили") ||
@@ -178,6 +191,27 @@ class JarvisBrainEngine(
         }
 
         return null
+    }
+
+    private fun topicMemoryQuery(normalized: String): String? {
+        val prefixes = listOf(
+            "что мы говорили про ",
+            "что мы обсуждали про ",
+            "о чем мы говорили про ",
+            "о чем мы говорили насчет ",
+            "о чём мы говорили про ",
+            "о чём мы говорили насчёт ",
+            "что я говорил про ",
+            "что я рассказывал про ",
+            "что ты помнишь про ",
+            "вспомни что мы говорили про "
+        )
+        val prefix = prefixes.firstOrNull { normalized.startsWith(it) } ?: return null
+        return normalized.removePrefix(prefix)
+            .trim()
+            .trim('?', '.', '!', ',', ':', ';')
+            .takeIf { it.length >= 2 }
+            ?.take(180)
     }
 
     private fun relevantMemoryAnswer(query: String): String? {
