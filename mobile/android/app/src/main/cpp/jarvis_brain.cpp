@@ -196,9 +196,9 @@ jstring generate_locked(
     llama_sampler_chain_params chain_params = llama_sampler_chain_default_params();
     chain_params.no_perf = true;
     llama_sampler * sampler = llama_sampler_chain_init(chain_params);
-    llama_sampler_chain_add(sampler, llama_sampler_init_top_k(40));
-    llama_sampler_chain_add(sampler, llama_sampler_init_top_p(0.92f, 1));
-    llama_sampler_chain_add(sampler, llama_sampler_init_temp(0.72f));
+    llama_sampler_chain_add(sampler, llama_sampler_init_top_k(20));
+    llama_sampler_chain_add(sampler, llama_sampler_init_top_p(0.80f, 1));
+    llama_sampler_chain_add(sampler, llama_sampler_init_temp(0.70f));
     llama_sampler_chain_add(sampler, llama_sampler_init_dist(LLAMA_DEFAULT_SEED));
 
     llama_batch batch = llama_batch_get_one(
