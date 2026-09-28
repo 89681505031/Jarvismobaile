@@ -42,6 +42,7 @@ class MainActivity : Activity() {
     private lateinit var router: PhoneCommandRouter
     private lateinit var gigaChat: GigaChatClient
     private lateinit var brain: JarvisBrainEngine
+    private lateinit var modelStore: JarvisModelStore
     private val brainGeneration = AtomicInteger(0)
     private val brainTestRunning = AtomicBoolean(false)
     private lateinit var speechInput: SpeechInputController
@@ -126,6 +127,7 @@ class MainActivity : Activity() {
             ?.getStringExtra(WakeForegroundService.EXTRA_COMMAND)?.take(240)
         fishAudioTts = FishAudioTts(this)
         memory = JarvisMemory(this)
+        modelStore = JarvisModelStore(this)
         brain = JarvisBrainEngine(memory)
         cloudMemory = RedisMemoryGateway(this)
         tts = TextToSpeech(this) { status ->
@@ -574,6 +576,38 @@ class MainActivity : Activity() {
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == 7440) {
+            if (resultCode != RESULT_OK) {
+                voiceEvent("onJarvisBrainModelStatus", "cancelled", "Выбор модели отменён.")
+                return
+            }
+            val uri = data?.data
+            if (uri == null) {
+                voiceEvent("onJarvisBrainModelStatus", "error", "Android не вернул файл модели.")
+                return
+            }
+            showVoiceStatus("Копирую GGUF-модель в локальную память JARVIS…")
+            backgroundExecutor.execute {
+                val installed = modelStore.installFrom(uri)
+                runOnUiThread {
+                    installed.fold(
+                        onSuccess = { info ->
+                            val text = "GGUF-модель сохранена локально: " +
+                                modelStore.humanSize(info.bytes) +
+                                ". Следующий этап — подключение нативного генератора."
+                            voiceEvent("onJarvisBrainModelStatus", "stored", text)
+                            showVoiceStatus(text)
+                        },
+                        onFailure = { error ->
+                            val text = error.message ?: "Не удалось сохранить GGUF-модель."
+                            voiceEvent("onJarvisBrainModelStatus", "error", text)
+                            showVoiceStatus(text)
+                        }
+                    )
+                }
+            }
+            return
+        }
         if (requestCode == 7411 || requestCode == 7412) {
             if (resultCode == RESULT_OK) {
                 if (requestCode == 7411) {
@@ -1210,6 +1244,21 @@ class MainActivity : Activity() {
         }
     }
 
+    private fun selectJarvisBrainModelPicker() {
+        if (!activityResumed || isFinishing || isDestroyed) return
+        val picker = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+            type = "application/octet-stream"
+            addCategory(Intent.CATEGORY_OPENABLE)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        try {
+            @Suppress("DEPRECATION")
+            startActivityForResult(picker, 7440)
+        } catch (_: Exception) {
+            showVoiceStatus("Выбор GGUF-модели недоступен на этом устройстве.")
+        }
+    }
+
     private fun selectVisionImage() {
         if (!activityResumed || !skills.enabled("vision")) return
         val picker = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
@@ -1574,15 +1623,38 @@ class MainActivity : Activity() {
         }
 
         @JavascriptInterface
-        fun getJarvisBrainStatus(): String = JSONObject().apply {
-            put("engine", "JARVIS BRAIN")
-            put("version", "0.1")
-            put("mode", "local")
-            put("networkRequired", false)
-            put("memoryLocal", true)
-            put("neuralModelInstalled", false)
-            put("legacyGigaConfigured", gigaChat.configured())
-        }.toString()
+        fun getJarvisBrainStatus(): String {
+            val info = modelStore.info()
+            return JSONObject().apply {
+                put("engine", "JARVIS BRAIN")
+                put("version", "0.1")
+                put("mode", "local")
+                put("networkRequired", false)
+                put("memoryLocal", true)
+                put("modelFilePresent", info.present)
+                put("modelValid", info.validGguf)
+                put("modelBytes", info.bytes)
+                put("modelSize", modelStore.humanSize(info.bytes))
+                put("neuralModelInstalled", false)
+                put("legacyGigaConfigured", gigaChat.configured())
+            }.toString()
+        }
+
+        @JavascriptInterface
+        fun chooseJarvisBrainModel() {
+            runOnUiThread { this@MainActivity.selectJarvisBrainModelPicker() }
+        }
+
+        @JavascriptInterface
+        fun removeJarvisBrainModel(): String {
+            val removed = modelStore.remove()
+            brainGeneration.incrementAndGet()
+            return if (removed) {
+                "Локальный файл модели удалён."
+            } else {
+                "Не удалось удалить локальный файл модели."
+            }
+        }
 
         @JavascriptInterface
         fun getGigaBrainStatus(): String = JSONObject().apply {
