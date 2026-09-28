@@ -16,7 +16,9 @@ class JarvisNativeLanguageModel(
     @Volatile private var loadedPath: String? = null
 
     override fun isReady(): Boolean =
-        nativeLibraryLoaded && modelStore.modelFile() != null
+        nativeLibraryLoaded &&
+            runCatching { nativeRuntimeAvailable() }.getOrDefault(false) &&
+            modelStore.modelFile() != null
 
     override fun modelLabel(): String =
         modelStore.modelFile()?.name ?: "не установлена"
@@ -90,6 +92,7 @@ class JarvisNativeLanguageModel(
         }
     }
 
+    private external fun nativeRuntimeAvailable(): Boolean
     private external fun nativeLoadModel(path: String): Boolean
     private external fun nativeGenerate(prompt: String, maxNewTokens: Int): String?
     private external fun nativeUnloadModel()
