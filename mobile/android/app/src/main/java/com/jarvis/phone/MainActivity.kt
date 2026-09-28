@@ -88,7 +88,6 @@ class MainActivity : Activity() {
     @Volatile private var selectedPersona = "J.A.R.V.I.S."
     private lateinit var fishAudioTts: FishAudioTts
     private lateinit var memory: JarvisMemory
-    private lateinit var cloudMemory: RedisMemoryGateway
     private var isSpeaking = false
     private var speechPlaybackStarted = false
     private var speechTextLength = 0
@@ -127,7 +126,6 @@ class MainActivity : Activity() {
         modelStore = JarvisModelStore(this)
         localLanguageModel = JarvisNativeLanguageModel(modelStore)
         brain = JarvisBrainEngine(memory, localLanguageModel)
-        cloudMemory = RedisMemoryGateway(this)
         tts = TextToSpeech(this) { status ->
             ttsReady = status == TextToSpeech.SUCCESS
             if (ttsReady) {
@@ -1600,12 +1598,6 @@ class MainActivity : Activity() {
 
         @JavascriptInterface fun getUserName(): String = memory.getUserName()
         @JavascriptInterface fun getMemorySummary(): String = memory.memoryContext()
-        @JavascriptInterface fun setMemoryGateway(url: String, token: String): String {
-            return cloudMemory.configure(url, token)
-        }
-        @JavascriptInterface fun getMemoryGatewayStatus(): String = cloudMemory.status()
-        @JavascriptInterface fun getMemoryGatewayUrl(): String = cloudMemory.endpoint()
-
 
         @JavascriptInterface
         fun setFishAudioKey(fish: String): String {
