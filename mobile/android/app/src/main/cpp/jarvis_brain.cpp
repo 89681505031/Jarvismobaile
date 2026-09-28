@@ -162,6 +162,7 @@ jstring generate_locked(
     output.reserve(static_cast<size_t>(n_predict) * 5U);
 
     bool failed = false;
+    llama_token next_token = LLAMA_TOKEN_NULL;
     for (uint32_t i = 0; i < n_predict; ++i) {
         if (llama_decode(context, batch) != 0) {
             log_error("llama_decode failed");
@@ -169,21 +170,19 @@ jstring generate_locked(
             break;
         }
 
-        const llama_token token = llama_sampler_sample(sampler, context, -1);
-        if (llama_vocab_is_eog(vocab, token)) {
+        next_token = llama_sampler_sample(sampler, context, -1);
+        if (llama_vocab_is_eog(vocab, next_token)) {
             break;
         }
 
-        const std::string piece = token_piece(vocab, token);
+        const std::string piece = token_piece(vocab, next_token);
         if (piece.empty()) {
             log_error("failed to decode generated token");
             failed = true;
             break;
         }
         output.append(piece);
-        batch = llama_batch_get_one(
-            const_cast<llama_token *>(&token), 1
-        );
+        batch = llama_batch_get_one(&next_token, 1);
     }
 
     llama_sampler_free(sampler);
