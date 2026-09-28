@@ -62,10 +62,8 @@ class JarvisMemory(context: Context) {
     fun episodeCount(): Int = episodes.count()
 
     /**
-     * Optional context sent to GigaChat ONLY when the user enables the memory
-     * sharing switch. Includes the profile and saved self-disclosures, but never
-     * raw contact data, OS events or credential-like secrets. Chat turns are
-     * provided separately as bounded role-labelled messages.
+     * Bounded local context for JARVIS BRAIN. Includes the profile and saved
+     * self-disclosures, but never credential-like secrets.
      */
     fun approvedBrainFacts(query: String = ""): String = synchronized(lock) {
         val facts = readArray("facts")
@@ -74,7 +72,7 @@ class JarvisMemory(context: Context) {
             .map { facts.optString(it).trim() }
             .filter { it.isNotBlank() }
 
-        // Keep every fact on-device. For each GigaChat request select the most
+        // Keep every fact on-device. For each brain request select the most
         // relevant older facts plus recent ones instead of silently forgetting
         // everything beyond an arbitrary 10/30 item window.
         val tokens = normalize(query)
@@ -188,12 +186,33 @@ class JarvisMemory(context: Context) {
     private fun appendUniqueFact(fact: String) {
         val facts = readArray("facts")
         val next = JSONArray()
+        val incomingSlot = factSlot(fact)
         for (i in 0 until facts.length()) {
             val existing = facts.optString(i).trim()
-            if (existing.isNotBlank() && !existing.equals(fact, ignoreCase = true)) next.put(existing)
+            if (existing.isBlank() || existing.equals(fact, ignoreCase = true)) continue
+            // Stateful profile facts should evolve instead of accumulating
+            // contradictory old values. Preferences remain multi-valued.
+            if (incomingSlot != null && factSlot(existing) == incomingSlot) continue
+            next.put(existing)
         }
         next.put(fact)
         prefs.edit().putString("facts", next.toString()).apply()
+    }
+
+    private fun factSlot(text: String): String? {
+        val value = normalize(text).replace('ё', 'е')
+        return when {
+            value.contains("меня зовут") ||
+                value.contains("мое имя") ||
+                value.contains("имя пользователя") -> "name"
+            value.contains("я живу ") ||
+                value.contains("пользователь живет ") -> "residence"
+            value.contains("я работаю ") ||
+                value.contains("пользователь работает ") -> "work"
+            value.contains("я учусь ") ||
+                value.contains("пользователь учится ") -> "study"
+            else -> null
+        }
     }
 
     private fun containsSecret(text: String): Boolean {
