@@ -162,7 +162,7 @@ class JarvisModelStore(private val context: Context) {
         }
 
         validateBasic(temp)
-        val actualSha = digest.digest().joinToString("") { "%02x".format(Locale.US, it) }
+        val actualSha = digest.digest().joinToString("") { byte -> "%02x".format(Locale.US, byte.toInt() and 0xff) }
         require(actualSha.equals(profile.sha256, ignoreCase = true)) {
             temp.delete()
             "Проверка SHA-256 не пройдена. Файл модели удалён."
@@ -242,14 +242,14 @@ class JarvisModelStore(private val context: Context) {
                 id = "qwen3-0.6b-q4km",
                 label = "JARVIS Lite · Qwen3 0.6B Q4_K_M",
                 approximateBytes = 397_000_000L,
-                url = "https://huggingface.co/Qwen/Qwen3-0.6B-GGUF/resolve/main/Qwen3-0.6B-Q4_K_M.gguf?download=true",
+                url = "https://huggingface.co/Qwen/Qwen3-0.6B-GGUF/resolve/1208e45d782fe18602c5eaf10e5758d5b0f24c03/Qwen3-0.6B-Q4_K_M.gguf?download=true",
                 sha256 = "b0638f08417a2d3c8652760462eb5407c6e30173cf9608ad0820757a281eea0e"
             ),
             Profile(
                 id = "qwen3-1.7b-q4km",
                 label = "JARVIS Standard · Qwen3 1.7B Q4_K_M",
                 approximateBytes = 1_280_000_000L,
-                url = "https://huggingface.co/ggml-org/Qwen3-1.7B-GGUF/resolve/main/Qwen3-1.7B-Q4_K_M.gguf?download=true",
+                url = "https://huggingface.co/ggml-org/Qwen3-1.7B-GGUF/resolve/daeb8e2d528a760970442092f6bf1e55c3b659eb/Qwen3-1.7B-Q4_K_M.gguf?download=true",
                 sha256 = "d2387ca2dbfee2ffabce7120d3770dadca0b293052bc2f0e138fdc940d9bc7b5"
             )
         )
