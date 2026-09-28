@@ -262,9 +262,11 @@ $('skipRegistration').onclick=()=>{localStorage.setItem('jarvisOnboarded','1');l
     const version=status.version||'0.1';
     badge.textContent='●  JARVIS BRAIN · ЛОКАЛЬНО';
     badge.dataset.state='ready';
-    info.textContent=status.neuralModelInstalled
+    const memoryCount=Number(status.memoryEpisodes||0);
+    const memoryText=' · эпизодов памяти: '+memoryCount;
+    info.textContent=(status.neuralModelInstalled
       ? 'JARVIS BRAIN '+version+' работает полностью локально. Нейросетевая модель установлена.'
-      : 'JARVIS BRAIN '+version+' работает локально: память и офлайн-логика активны. Нативный генератор — следующий этап.';
+      : 'JARVIS BRAIN '+version+' работает локально: память и офлайн-логика активны. Нативный генератор — следующий этап.')+memoryText;
     if(modelStatus){
       modelStatus.textContent=status.modelFilePresent&&status.modelValid
         ? 'GGUF сохранён локально · '+(status.modelSize||'размер неизвестен')+' · ожидает нативный runtime.'
