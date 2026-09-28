@@ -250,6 +250,7 @@ $('skipRegistration').onclick=()=>{localStorage.setItem('jarvisOnboarded','1');l
 /* JARVIS BRAIN is the first-party on-device reasoning layer. */
 (function initJarvisBrainControls() {
   const badge=$('brainBadge'),info=$('brainStatus'),clear=$('clearBrainHistory');
+  const choose=$('chooseBrainModel'),remove=$('removeBrainModel'),modelStatus=$('brainModelStatus');
   if(!badge||!info)return;
 
   function readStatus(){
@@ -263,7 +264,13 @@ $('skipRegistration').onclick=()=>{localStorage.setItem('jarvisOnboarded','1');l
     badge.dataset.state='ready';
     info.textContent=status.neuralModelInstalled
       ? 'JARVIS BRAIN '+version+' работает полностью локально. Нейросетевая модель установлена.'
-      : 'JARVIS BRAIN '+version+' работает локально: память и офлайн-логика активны. Локальная нейросетевая модель — следующий этап.';
+      : 'JARVIS BRAIN '+version+' работает локально: память и офлайн-логика активны. Нативный генератор — следующий этап.';
+    if(modelStatus){
+      modelStatus.textContent=status.modelFilePresent&&status.modelValid
+        ? 'GGUF сохранён локально · '+(status.modelSize||'размер неизвестен')+' · ожидает нативный runtime.'
+        : 'Файл модели ещё не выбран.';
+    }
+    if(remove) remove.disabled=!status.modelFilePresent;
   }
 
   window.onJarvisBrainState=(phase,text)=>{
@@ -278,6 +285,22 @@ $('skipRegistration').onclick=()=>{localStorage.setItem('jarvisOnboarded','1');l
       badge.textContent='●  JARVIS BRAIN · ЛОКАЛЬНО';
       badge.dataset.state=phase||'ready';
     }
+  };
+
+  window.onJarvisBrainModelStatus=(phase,text)=>{
+    if(modelStatus) modelStatus.textContent=String(text||'Статус модели обновлён.');
+    if(phase==='stored'||phase==='removed') setTimeout(refresh,250);
+  };
+
+  if(choose) choose.onclick=()=>{
+    if(modelStatus) modelStatus.textContent='Откройте GGUF-файл в системном выборе файлов…';
+    window.AndroidJarvis?.chooseJarvisBrainModel?.();
+  };
+
+  if(remove) remove.onclick=()=>{
+    const result=window.AndroidJarvis?.removeJarvisBrainModel?.()||'Недоступно';
+    if(modelStatus) modelStatus.textContent=result;
+    window.onJarvisBrainModelStatus('removed',result);
   };
 
   if(clear) clear.onclick=()=>{
