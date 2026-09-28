@@ -6,13 +6,11 @@ on:
     paths:
       - 'mobile/android/**'
       - 'tests/**'
-      - 'memory-gateway/**'
       - '.github/workflows/**'
   pull_request:
     paths:
       - 'mobile/android/**'
       - 'tests/**'
-      - 'memory-gateway/**'
       - '.github/workflows/**'
 
 permissions:
