@@ -1,0 +1,50 @@
+name: Verify JARVIS BRAIN native
+
+on:
+  push:
+    branches:
+      - jarvis-brain-0.1
+    paths:
+      - 'mobile/android/**'
+      - '.github/workflows/verify-jarvis-brain-native.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  brain-apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+      - name: Build ARM64 JARVIS BRAIN debug APK
+        working-directory: mobile/android
+        env:
+          JARVIS_ARM64_ONLY: "1"
+        run: gradle --no-daemon assembleDebug
+      - name: Verify native brain library is packaged
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          from zipfile import ZipFile
+
+          apk = Path('mobile/android/app/build/outputs/apk/debug/app-debug.apk')
+          assert apk.is_file(), 'Debug APK was not produced'
+          with ZipFile(apk) as z:
+              names = set(z.namelist())
+          assert 'lib/arm64-v8a/libjarvisbrain.so' in names, 'libjarvisbrain.so missing from ARM64 APK'
+          print(f'APK OK: {apk} ({apk.stat().st_size / 1024 / 1024:.1f} MiB)')
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: jarvis-brain-0.1-arm64-debug
+          path: mobile/android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
