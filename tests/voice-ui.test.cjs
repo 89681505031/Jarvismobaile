@@ -220,7 +220,7 @@ test('local GGUF status is explicit and model removal stays on-device',()=>{
 test('local chat history is cleared only by the explicit history button',()=>{
   const {context}=load();
   const calls=[];
-  context.window.AndroidJarvis.clearGigaBrainHistory=()=>{
+  context.window.AndroidJarvis.clearJarvisBrainHistory=()=>{
     calls.push('history'); return 'Очищено';
   };
   context.document.getElementById('clearBrainHistory').onclick();
