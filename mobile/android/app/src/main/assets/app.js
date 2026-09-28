@@ -251,7 +251,7 @@ $('skipRegistration').onclick=()=>{localStorage.setItem('jarvisOnboarded','1');l
 (function initJarvisBrainControls() {
   const badge=$('brainBadge'),info=$('brainStatus'),clear=$('clearBrainHistory');
   const choose=$('chooseBrainModel'),remove=$('removeBrainModel'),modelStatus=$('brainModelStatus');
-  const lite=$('downloadBrainLite'),standard=$('downloadBrainStandard');
+  const lite=$('downloadBrainLite'),standard=$('downloadBrainStandard'),test=$('testBrainModel');
   if(!badge||!info)return;
 
   function readStatus(){
@@ -269,6 +269,8 @@ $('skipRegistration').onclick=()=>{localStorage.setItem('jarvisOnboarded','1');l
       ? 'JARVIS BRAIN '+version+' работает полностью локально. Нейросетевая модель установлена.'
       : 'JARVIS BRAIN '+version+' работает локально: память и офлайн-логика активны. Нативный генератор — следующий этап.')+memoryText;
     const downloading=!!status.modelDownloadRunning;
+    const testing=!!status.brainSelfTestRunning;
+    const busy=downloading||testing;
     if(modelStatus){
       if(status.modelFilePresent&&status.modelValid){
         const label=status.modelLabel||'GGUF-модель';
@@ -278,10 +280,11 @@ $('skipRegistration').onclick=()=>{localStorage.setItem('jarvisOnboarded','1');l
         modelStatus.textContent='Файл модели ещё не выбран.';
       }
     }
-    if(lite) lite.disabled=downloading;
-    if(standard) standard.disabled=downloading;
-    if(choose) choose.disabled=downloading;
-    if(remove) remove.disabled=downloading||!status.modelFilePresent;
+    if(lite) lite.disabled=busy;
+    if(standard) standard.disabled=busy;
+    if(choose) choose.disabled=busy;
+    if(test) test.disabled=busy||!status.modelFilePresent||!status.modelValid;
+    if(remove) remove.disabled=busy||!status.modelFilePresent;
   }
 
   window.onJarvisBrainState=(phase,text)=>{
@@ -303,6 +306,17 @@ $('skipRegistration').onclick=()=>{localStorage.setItem('jarvisOnboarded','1');l
     if(phase==='stored'||phase==='removed') deferUi(refresh,250);
   };
 
+  window.onJarvisBrainSelfTest=(phase,text)=>{
+    if(modelStatus) modelStatus.textContent=String(text||'Самопроверка JARVIS BRAIN…');
+    const busy=phase==='running';
+    if(lite) lite.disabled=busy;
+    if(standard) standard.disabled=busy;
+    if(choose) choose.disabled=busy;
+    if(test) test.disabled=busy;
+    if(remove) remove.disabled=busy;
+    if(phase==='success'||phase==='error') deferUi(refresh,500);
+  };
+
   window.onJarvisBrainModelDownload=(phase,text)=>{
     if(modelStatus) modelStatus.textContent=String(text||'Загрузка локальной модели…');
     const busy=phase==='starting'||phase==='progress';
@@ -320,6 +334,11 @@ $('skipRegistration').onclick=()=>{localStorage.setItem('jarvisOnboarded','1');l
 
   if(lite) lite.onclick=()=>startModelDownload('qwen3-0.6b-q4km');
   if(standard) standard.onclick=()=>startModelDownload('qwen3-1.7b-q4km');
+
+  if(test) test.onclick=()=>{
+    const result=window.AndroidJarvis?.testJarvisBrainModel?.()||'Недоступно';
+    if(modelStatus) modelStatus.textContent=result;
+  };
 
   if(choose) choose.onclick=()=>{
     if(modelStatus) modelStatus.textContent='Откройте GGUF-файл в системном выборе файлов…';
