@@ -481,6 +481,7 @@ class MainActivity : Activity() {
         val remaining = conversationDeadline - SystemClock.elapsedRealtime()
         if (remaining <= 0L) {
             conversationDeadline = 0L
+            voiceEvent("onJarvisConversationWindow", false, 0)
             if (wakeModeEnabled) scheduleWakeRestart(650L)
             return
         }
@@ -498,9 +499,11 @@ class MainActivity : Activity() {
     }
 
     private fun closeConversationWindow() {
+        val wasOpen = conversationDeadline > 0L
         conversationDeadline = 0L
         conversationRestart?.let { mainHandler.removeCallbacks(it) }
         conversationRestart = null
+        if (wasOpen && activityResumed) voiceEvent("onJarvisConversationWindow", false, 0)
     }
 
     private fun requestMicrophoneDiagnostic() {
