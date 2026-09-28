@@ -109,6 +109,7 @@ class JarvisBrainEngine(
                 append("\nРелевантные и недавние эпизоды памяти:\n").append(turns).append("\n")
             }
             append("\nТекущий вопрос пользователя:\n").append(query)
+            append("\n/no_think")
             append("\n\nОтвет JARVIS:")
         }.take(18_000)
     }
