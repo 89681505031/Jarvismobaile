@@ -9,7 +9,7 @@ function showMessage(t){message.textContent=t||''}
 function deferUi(fn,ms){
   if(typeof window!=='undefined'&&typeof window.setTimeout==='function')window.setTimeout(fn,ms);
 }function setPersonaState(persona,notifyNative=true){state.persona=canonicalPersona(persona);localStorage.setItem('jarvisPersona',state.persona);if(notifyNative)window.AndroidJarvis?.setPersona?.(state.persona);window.onJarvisPersonaChanged?.(state.persona)}function activatePersona(word){const persona=activationPersonas[(word||'').toLowerCase()];if(!persona)return;setPersonaState(persona,true);showMessage('Активирован персонаж: '+state.persona)}function render(){modeButton.textContent=state.mode==='phone'?'📱 PHONE MODE':'🖥️ PC MODE';modeNav.textContent=state.mode==='phone'?'📱 Телефон':'🖥️ ПК';window.onJarvisPersonaChanged?.(state.persona);showMessage('Готов к работе, '+(localStorage.getItem('jarvisName')||'сэр')+'. Персонаж: '+state.persona)}
-function sendCommand(v){const text=(v||command.value).trim();if(!text)return;state.waitingForCommand=false;window.AndroidJarvis?.stopListening?.();showMessage('Выполняю: «'+text+'»');try{const r=window.AndroidJarvis?.command(text);if(r){showMessage(r);const asyncNative=/^(Получаю свежую сводку новостей|Получаю местную новостную сводку|Получаю погоду по примерному местоположению|Запрашиваю доступ к местоположению|Читаю последнее сообщение WhatsApp|Открываю WhatsApp)/i.test(r);if(!asyncNative){window.AndroidJarvis?.speak(r)}}else showMessage('Обрабатываю запрос…')}catch(e){showMessage('Ошибка: '+e.message)}command.value=''}
+function sendCommand(v){const text=(v||command.value).trim();if(!text)return;state.waitingForCommand=false;window.AndroidJarvis?.stopListening?.();showMessage('Выполняю: «'+text+'»');try{const r=window.AndroidJarvis?.command(text);if(r){showMessage(r);const asyncNative=/^(Получаю свежую сводку новостей|Получаю местную новостную сводку|Получаю погоду по примерному местоположению|Запрашиваю доступ к местоположению|Читаю последнее сообщение WhatsApp|Открываю WhatsApp|Готовлю персональный брифинг|Готовлю сводку сообщений|Ищу сообщения от|Открываю камеру для локального анализа)/i.test(r);if(!asyncNative){window.AndroidJarvis?.speak(r)}}else showMessage('Обрабатываю запрос…')}catch(e){showMessage('Ошибка: '+e.message)}command.value=''}
 function onSpeechState(phase,text){state.waitingForCommand=['starting','listening','processing','permission'].includes(phase);$('micStatus').textContent=text||'';orbButton.setAttribute('aria-busy',state.waitingForCommand?'true':'false');if(phase==='listening')state.waitingForCommand=true;if(!state.waitingForCommand)$('micLevel').value=0;}
 window.onJarvisSpeechState=onSpeechState;window.onJarvisSpeechLevel=v=>{$('micLevel').value=Math.max(0,Math.min(100,(Number(v)+2)*8));};
 function startListening(){if(state.diagnosticActive){showMessage('Завершите проверку микрофона, затем нажмите на круг.');return}if(!window.AndroidJarvis?.startListening){showMessage('Голосовой ввод доступен в APK.');return}state.waitingForCommand=true;showMessage('Слушаю…');window.AndroidJarvis.startListening()}
@@ -85,6 +85,7 @@ function syncSettingSwitches(){
   if($('wakeMode'))$('wakeMode').checked=!!window.AndroidJarvis?.getWakeModeEnabled?.();
   if($('backgroundWake'))$('backgroundWake').checked=!!window.AndroidJarvis?.getBackgroundWakeEnabled?.();
   if($('voiceInterrupt'))$('voiceInterrupt').checked=!!window.AndroidJarvis?.getInterruptByVoice?.();
+  if($('continuousDialogue'))$('continuousDialogue').checked=window.AndroidJarvis?.continuousDialogueEnabled?.()!==false;
   if($('overlayMode'))$('overlayMode').checked=!!window.AndroidJarvis?.overlayEnabled?.();
   try{
     const brain=JSON.parse(window.AndroidJarvis?.getGigaBrainStatus?.()||'{}');
@@ -175,14 +176,32 @@ $('diagnoseMic').onclick=()=>{
 
 
 window.onJarvisFeatureStatus=(feature,text)=>{
-  const target=feature==='home'?'homeStatus':feature==='vision'?'visionStatus':feature==='updates'?'updateInfo':'reminderStatus';
-  $(target).textContent=text||'Готово';
-  if(feature==='vision')showMessage(text);
+  const target=feature==='home'?'homeStatus':
+    feature==='vision'?'visionStatus':
+    feature==='updates'?'updateInfo':
+    feature==='notifications'?'notificationBriefStatus':
+    feature==='briefing'?'briefingStatus':
+    feature==='tasks'?'taskStatus':'reminderStatus';
+  if($(target))$(target).textContent=text||'Готово';
+  if(['vision','notifications','briefing'].includes(feature))showMessage(text);
+};
+window.onJarvisConversationWindow=(active,seconds)=>{
+  if(!$('conversationStatus'))return;
+  $('conversationStatus').textContent=active
+    ? 'Можно продолжать без слова «Джарвис»: слушаю до '+Number(seconds||30)+' секунд.'
+    : 'Непрерывный диалог завершён.';
 };
 $('voiceInterrupt').checked=!!window.AndroidJarvis?.getInterruptByVoice?.();
 $('voiceInterrupt').onchange=e=>{
   window.AndroidJarvis?.setInterruptByVoice?.(!!e.target.checked);
   scheduleSettingSync();
+};
+$('continuousDialogue').checked=window.AndroidJarvis?.continuousDialogueEnabled?.()!==false;
+$('continuousDialogue').onchange=e=>{
+  window.AndroidJarvis?.setContinuousDialogueEnabled?.(!!e.target.checked);
+  $('conversationStatus').textContent=e.target.checked
+    ? 'После каждого ответа JARVIS будет ждать продолжение до 30 секунд.'
+    : 'После ответа JARVIS вернётся к ожиданию имени.';
 };
 $('batteryMinutes').value=String(window.AndroidJarvis?.batteryMinutes?.()??0);
 $('batteryMinutes').onchange=e=>{
@@ -199,6 +218,44 @@ $('addReminder').onclick=()=>{
 $('listReminders').onclick=()=>{
   $('reminderStatus').textContent=window.AndroidJarvis?.listReminders?.()||'Недоступно';
 };
+
+$('addTask').onclick=()=>{
+  const text=$('taskText').value.trim();
+  if(!text){$('taskStatus').textContent='Введите название задачи.';return;}
+  $('taskStatus').textContent=window.AndroidJarvis?.addTask?.(text)||'Недоступно';
+  $('taskText').value='';
+};
+$('listTasks').onclick=()=>{
+  $('taskStatus').textContent=window.AndroidJarvis?.listTasks?.()||'Недоступно';
+};
+$('calendarEvent').onclick=()=>{
+  const text=$('taskText').value.trim();
+  if(!text){$('taskStatus').textContent='Введите название события.';return;}
+  $('taskStatus').textContent=window.AndroidJarvis?.createCalendarEvent?.(text)||'Недоступно';
+};
+$('openCalendar').onclick=()=>{
+  $('taskStatus').textContent=window.AndroidJarvis?.openCalendar?.()||'Недоступно';
+};
+
+$('notificationAccess').onclick=()=>window.AndroidJarvis?.openNotificationAccess?.();
+$('notificationBrief').onclick=()=>{
+  $('notificationBriefStatus').textContent='Готовлю сводку сообщений…';
+  window.AndroidJarvis?.summarizeNotifications?.('');
+};
+
+$('morningBriefing').onclick=()=>{
+  $('briefingStatus').textContent='Готовлю утренний брифинг…';
+  window.AndroidJarvis?.requestBriefing?.('morning');
+};
+$('eveningBriefing').onclick=()=>{
+  $('briefingStatus').textContent='Готовлю вечерний брифинг…';
+  window.AndroidJarvis?.requestBriefing?.('evening');
+};
+$('dailyBriefing').onclick=()=>{
+  $('briefingStatus').textContent='Готовлю сводку на сегодня…';
+  window.AndroidJarvis?.requestBriefing?.('daily');
+};
+
 $('visionCamera').onclick=()=>window.AndroidJarvis?.startVisionCamera?.();
 $('visionPicker').onclick=()=>window.AndroidJarvis?.selectVisionPhoto?.();
 $('homeStatus').textContent=window.AndroidJarvis?.homeStatus?.()||'Умный дом не подключён.';
