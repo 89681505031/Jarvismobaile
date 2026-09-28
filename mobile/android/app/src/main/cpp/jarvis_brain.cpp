@@ -34,6 +34,51 @@ void free_model_locked() {
     }
 }
 
+std::string apply_model_chat_template(
+        llama_model * model,
+        const std::string & user_content) {
+    if (model == nullptr || user_content.empty()) {
+        return user_content;
+    }
+
+    const char * tmpl = llama_model_chat_template(model, nullptr);
+    if (tmpl == nullptr || *tmpl == '\0') {
+        return user_content;
+    }
+
+    llama_chat_message message {
+        "user",
+        user_content.c_str()
+    };
+
+    int32_t needed = llama_chat_apply_template(
+        tmpl,
+        &message,
+        1,
+        true,
+        nullptr,
+        0
+    );
+    if (needed <= 0 || needed > 512 * 1024) {
+        return user_content;
+    }
+
+    std::vector<char> formatted(static_cast<size_t>(needed) + 1U, '\0');
+    int32_t written = llama_chat_apply_template(
+        tmpl,
+        &message,
+        1,
+        true,
+        formatted.data(),
+        static_cast<int32_t>(formatted.size())
+    );
+    if (written <= 0) {
+        return user_content;
+    }
+
+    return std::string(formatted.data(), static_cast<size_t>(written));
+}
+
 std::string token_piece(const llama_vocab * vocab, llama_token token) {
     char small[256];
     int32_t count = llama_token_to_piece(
@@ -81,10 +126,12 @@ jstring generate_locked(
         return nullptr;
     }
 
+    const std::string model_prompt = apply_model_chat_template(g_model, prompt);
+
     const int32_t token_count = -llama_tokenize(
         vocab,
-        prompt.c_str(),
-        static_cast<int32_t>(prompt.size()),
+        model_prompt.c_str(),
+        static_cast<int32_t>(model_prompt.size()),
         nullptr,
         0,
         true,
@@ -98,8 +145,8 @@ jstring generate_locked(
     std::vector<llama_token> prompt_tokens(static_cast<size_t>(token_count));
     const int32_t written = llama_tokenize(
         vocab,
-        prompt.c_str(),
-        static_cast<int32_t>(prompt.size()),
+        model_prompt.c_str(),
+        static_cast<int32_t>(model_prompt.size()),
         prompt_tokens.data(),
         token_count,
         true,
