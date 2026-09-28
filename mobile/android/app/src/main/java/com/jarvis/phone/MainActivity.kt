@@ -1633,6 +1633,7 @@ class MainActivity : Activity() {
                 put("mode", "local")
                 put("networkRequired", false)
                 put("memoryLocal", true)
+                put("memoryEpisodes", memory.episodeCount())
                 put("modelFilePresent", info.present)
                 put("modelValid", info.validGguf)
                 put("modelBytes", info.bytes)
