@@ -11,7 +11,8 @@ import java.util.Locale
  * changing the rest of the Android app.
  */
 class JarvisBrainEngine(
-    private val memory: JarvisMemory
+    private val memory: JarvisMemory,
+    private val languageModel: JarvisLanguageModel = UnavailableJarvisLanguageModel
 ) {
     data class Result(
         val success: Boolean,
@@ -24,6 +25,7 @@ class JarvisBrainEngine(
         MEMORY,
         IDENTITY,
         CONVERSATION,
+        NEURAL_MODEL,
         LOCAL_FALLBACK
     }
 
@@ -55,12 +57,53 @@ class JarvisBrainEngine(
             return Result(true, it, Source.CONVERSATION)
         }
 
+        if (languageModel.isReady()) {
+            val generation = languageModel.generate(buildNeuralPrompt(clean, persona))
+            if (generation.success && generation.text.isNotBlank()) {
+                return Result(true, generation.text.trim(), Source.NEURAL_MODEL)
+            }
+        }
+
         return Result(
             success = false,
             text = "Сэр, этот вопрос уже требует локальной языковой модели. " +
                 "JARVIS BRAIN работает без GigaChat и без внешнего ИИ, но нейросетевой генератор ещё не установлен.",
             source = Source.LOCAL_FALLBACK
         )
+    }
+
+    fun neuralModelReady(): Boolean = languageModel.isReady()
+
+    fun neuralModelLabel(): String = languageModel.modelLabel()
+
+    private fun buildNeuralPrompt(query: String, persona: String): String {
+        val role = when (persona) {
+            "Astra" -> "Астра: творческий, находчивый помощник."
+            "Luna" -> "Луна: аналитичный и аккуратный помощник."
+            "Terra" -> "Терра: практичный повседневный помощник."
+            "Кибер", "Cyber" -> "Кибер: технический помощник."
+            else -> "J.A.R.V.I.S.: универсальный персональный помощник."
+        }
+        val facts = memory.approvedBrainFacts(query).take(8000)
+        val turns = memory.recentDialogues().takeLast(6)
+            .joinToString("\n") { (user, assistant) ->
+                "Пользователь: ${user.take(900)}\nJARVIS: ${assistant.take(1200)}"
+            }
+
+        return buildString {
+            append("Ты работаешь внутри JARVIS BRAIN полностью локально на телефоне.\n")
+            append(role).append("\n")
+            append("Отвечай по-русски естественно и по существу. Не выдумывай действия телефона, ")
+            append("если их не выполнил отдельный модуль команд.\n")
+            if (facts.isNotBlank()) {
+                append("\nЛокальная долговременная память:\n").append(facts).append("\n")
+            }
+            if (turns.isNotBlank()) {
+                append("\nНедавний разговор:\n").append(turns).append("\n")
+            }
+            append("\nТекущий вопрос пользователя:\n").append(query)
+            append("\n\nОтвет JARVIS:")
+        }.take(18_000)
     }
 
     private fun identityAnswer(normalized: String, persona: String): String? {
