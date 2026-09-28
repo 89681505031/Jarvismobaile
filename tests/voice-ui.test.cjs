@@ -204,6 +204,22 @@ test('JARVIS BRAIN is local and exposes the GGUF picker without a cloud key', ()
   assert.match(elements.get('brainBadge').textContent,/ЛОКАЛЬНО/);
 });
 
+test('built-in local model buttons select the expected verified profiles',()=>{
+  const {context,elements}=load();
+  const calls=[];
+  context.window.AndroidJarvis.downloadJarvisBrainModel=id=>{
+    calls.push(id);
+    return 'Загрузка запущена';
+  };
+  elements.get('downloadBrainLite').onclick();
+  elements.get('downloadBrainStandard').onclick();
+  assert.deepEqual(calls,['qwen3-0.6b-q4km','qwen3-1.7b-q4km']);
+  context.window.onJarvisBrainModelDownload('progress','Загрузка JARVIS Lite: 42%');
+  assert.match(elements.get('brainModelStatus').textContent,/42%/);
+  context.window.onJarvisBrainModelDownload('stored','Модель установлена локально');
+  assert.match(elements.get('brainModelStatus').textContent,/установлена локально/);
+});
+
 test('local GGUF status is explicit and model removal stays on-device',()=>{
   const {context,elements}=load();
   const calls=[];
