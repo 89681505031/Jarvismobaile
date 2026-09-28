@@ -594,9 +594,11 @@ class MainActivity : Activity() {
                 runOnUiThread {
                     installed.fold(
                         onSuccess = { info ->
+                            localLanguageModel.unload()
+                            brainGeneration.incrementAndGet()
                             val text = "GGUF-модель сохранена локально: " +
                                 modelStore.humanSize(info.bytes) +
-                                ". Следующий этап — подключение нативного генератора."
+                                ". JARVIS BRAIN готов загрузить её при следующем сложном вопросе."
                             voiceEvent("onJarvisBrainModelStatus", "stored", text)
                             showVoiceStatus(text)
                         },
@@ -1820,6 +1822,7 @@ class MainActivity : Activity() {
         diagnosticGeneration++
         mainHandler.removeCallbacksAndMessages(null)
         backgroundExecutor.shutdownNow()
+        if (::localLanguageModel.isInitialized) localLanguageModel.unload()
         speechInput.destroy()
         tts?.stop()
         tts?.shutdown()
