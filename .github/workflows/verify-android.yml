@@ -2,7 +2,7 @@ name: Verify Android changes
 
 on:
   push:
-    branches: [fix-microphone-sensitivity]
+    branches: [fix-microphone-sensitivity, jarvis-brain-0.1]
     paths:
       - 'mobile/android/**'
       - 'tests/**'
