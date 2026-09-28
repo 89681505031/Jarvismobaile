@@ -7,10 +7,12 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
-# The full local LLM backend is currently enabled for the 64-bit ABIs used by
-# modern Android phones and the standard x86_64 emulator. Other ABIs receive a
+option(JARVIS_BRAIN_NATIVE "Build the full on-device neural runtime" ON)
+
+# The full local LLM backend is compiled for ARM64 phones. Other ABIs receive a
 # tiny JNI stub so the rest of JARVIS remains installable and functional.
-if(ANDROID_ABI STREQUAL "arm64-v8a" OR ANDROID_ABI STREQUAL "x86_64")
+# Diagnostic builds may also disable the heavy neural target explicitly.
+if(JARVIS_BRAIN_NATIVE AND ANDROID_ABI STREQUAL "arm64-v8a")
     include(FetchContent)
 
     set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
