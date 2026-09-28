@@ -45,6 +45,7 @@ class MainActivity : Activity() {
     private lateinit var localLanguageModel: JarvisNativeLanguageModel
     private val brainGeneration = AtomicInteger(0)
     private val modelDownloadRunning = AtomicBoolean(false)
+    private val brainSelfTestRunning = AtomicBoolean(false)
     private lateinit var speechInput: SpeechInputController
     private lateinit var offlineWake: OfflineWakeEngine
     private var pendingMicStart = false
@@ -1629,6 +1630,7 @@ class MainActivity : Activity() {
                 put("modelProfileId", info.profileId)
                 put("modelLabel", info.label)
                 put("modelDownloadRunning", modelDownloadRunning.get())
+                put("brainSelfTestRunning", brainSelfTestRunning.get())
                 put("neuralModelInstalled", localLanguageModel.isReady())
             }.toString()
         }
@@ -1702,6 +1704,59 @@ class MainActivity : Activity() {
             }
 
             return "Загрузка ${profile.label} запущена."
+        }
+
+        @JavascriptInterface
+        fun testJarvisBrainModel(): String {
+            if (modelDownloadRunning.get()) return "Дождитесь завершения загрузки модели."
+            if (modelStore.modelFile() == null) return "Сначала установите GGUF-модель."
+            if (!brainSelfTestRunning.compareAndSet(false, true)) {
+                return "Самопроверка JARVIS BRAIN уже выполняется."
+            }
+
+            brainGeneration.incrementAndGet()
+            runOnUiThread {
+                voiceEvent(
+                    "onJarvisBrainSelfTest",
+                    "running",
+                    "Загружаю локальную модель в RAM и проверяю генерацию…"
+                )
+            }
+
+            modelExecutor.execute {
+                val started = SystemClock.elapsedRealtime()
+                val result = try {
+                    localLanguageModel.generate(
+                        prompt = "Ты JARVIS BRAIN. Ответь одной короткой фразой по-русски: локальный мозг работает. /no_think",
+                        maxNewTokens = 64
+                    )
+                } catch (_: Throwable) {
+                    JarvisLanguageModel.Generation(
+                        success = false,
+                        text = "Ошибка локального нейросетевого самотеста."
+                    )
+                }
+                val elapsedMs = SystemClock.elapsedRealtime() - started
+                brainSelfTestRunning.set(false)
+
+                runOnUiThread {
+                    if (isFinishing || isDestroyed) return@runOnUiThread
+                    val seconds = String.format(Locale.US, "%.1f", elapsedMs / 1000.0)
+                    val text = if (result.success) {
+                        "Самотест пройден за $seconds с. Ответ модели: ${result.text.take(240)}"
+                    } else {
+                        "Самотест не пройден за $seconds с. ${result.text}"
+                    }
+                    voiceEvent(
+                        "onJarvisBrainSelfTest",
+                        if (result.success) "success" else "error",
+                        text
+                    )
+                    showVoiceStatus(text)
+                }
+            }
+
+            return "Самопроверка JARVIS BRAIN запущена."
         }
 
         @JavascriptInterface
