@@ -7,7 +7,12 @@ import java.util.Locale
 
 class JarvisMemory(context: Context) {
     private val prefs = context.getSharedPreferences("jarvis_memory", Context.MODE_PRIVATE)
+    private val episodes = JarvisEpisodeMemory(context)
     private val lock = Any()
+
+    init {
+        migrateLegacyDialogues()
+    }
     private fun readArray(key: String): JSONArray = try { JSONArray(prefs.getString(key, "[]")) } catch (_: Exception) { JSONArray() }
     private fun readObject(key: String): JSONObject = try { JSONObject(prefs.getString(key, "{}")) } catch (_: Exception) { JSONObject() }
 
@@ -43,29 +48,18 @@ class JarvisMemory(context: Context) {
 
     fun rememberTurn(userText: String, assistantText: String) {
         if (userText.isBlank() || assistantText.isBlank()) return
-        synchronized(lock) {
-            val old = readArray("dialogues")
-            val next = JSONArray()
-            val start = maxOf(0, old.length() - 19)
-            for (i in start until old.length()) next.put(old.opt(i))
-            next.put(JSONObject().apply {
-                put("user", userText.trim().take(4000))
-                put("assistant", assistantText.trim().take(8000))
-                put("time", System.currentTimeMillis())
-            })
-            prefs.edit().putString("dialogues", next.toString()).apply()
-        }
+        // Do not create durable conversational memories from credential-like text.
+        if (containsSecret(userText)) return
+        episodes.remember(userText, assistantText)
     }
 
-    fun recentDialogues(): List<Pair<String, String>> = synchronized(lock) {
-        val array = readArray("dialogues")
-        (0 until array.length()).mapNotNull { i ->
-            val item = array.optJSONObject(i) ?: return@mapNotNull null
-            val user = item.optString("user").trim()
-            val assistant = item.optString("assistant").trim()
-            if (user.isBlank() || assistant.isBlank()) null else user to assistant
-        }
-    }
+    fun recentDialogues(): List<Pair<String, String>> =
+        episodes.recent(20).map { it.userText to it.assistantText }
+
+    fun relevantDialogues(query: String, limit: Int = 8): List<Pair<String, String>> =
+        episodes.relevant(query, limit).map { it.userText to it.assistantText }
+
+    fun episodeCount(): Int = episodes.count()
 
     /**
      * Optional context sent to GigaChat ONLY when the user enables the memory
@@ -114,9 +108,10 @@ class JarvisMemory(context: Context) {
     }
 
     fun clearChatHistory(): Int = synchronized(lock) {
-        val count = readArray("dialogues").length()
+        val legacyCount = readArray("dialogues").length()
+        val episodeCount = episodes.clear()
         prefs.edit().remove("dialogues").apply()
-        count
+        episodeCount + legacyCount
     }
 
 
@@ -302,6 +297,29 @@ class JarvisMemory(context: Context) {
                 }
             }
         }.trim().take(16000)
+    }
+
+
+    private fun migrateLegacyDialogues() {
+        if (prefs.getBoolean("episode_memory_migrated_v1", false)) return
+        synchronized(lock) {
+            if (prefs.getBoolean("episode_memory_migrated_v1", false)) return
+            val old = readArray("dialogues")
+            if (episodes.count() == 0) {
+                for (i in 0 until old.length()) {
+                    val item = old.optJSONObject(i) ?: continue
+                    val user = item.optString("user").trim()
+                    val assistant = item.optString("assistant").trim()
+                    val time = item.optLong("time", System.currentTimeMillis())
+                    if (user.isBlank() || assistant.isBlank() || containsSecret(user)) continue
+                    episodes.remember(user, assistant, time)
+                }
+            }
+            prefs.edit()
+                .remove("dialogues")
+                .putBoolean("episode_memory_migrated_v1", true)
+                .apply()
+        }
     }
 
 
