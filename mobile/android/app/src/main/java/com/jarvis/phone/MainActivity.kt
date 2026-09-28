@@ -1004,6 +1004,148 @@ class MainActivity : Activity() {
         }.trim()
     }
 
+    private fun notificationDigest(
+        messages: List<JarvisNotificationService.IncomingMessage>,
+        filter: String? = null
+    ): String {
+        val selected = if (filter.isNullOrBlank()) messages else messages.filter {
+            it.title.contains(filter, ignoreCase = true) || it.text.contains(filter, ignoreCase = true)
+        }
+        if (selected.isEmpty()) {
+            return if (filter.isNullOrBlank())
+                "Новых сообщений WhatsApp или Telegram в сохранённых уведомлениях нет."
+            else "Не нашёл сохранённых сообщений от «$filter»."
+        }
+        val apps = selected.groupingBy {
+            when (it.packageName) {
+                JarvisNotificationService.WHATSAPP, JarvisNotificationService.WHATSAPP_BUSINESS -> "WhatsApp"
+                JarvisNotificationService.TELEGRAM -> "Telegram"
+                else -> "другое приложение"
+            }
+        }.eachCount().entries.joinToString(", ") { "${it.key}: ${it.value}" }
+        val recent = selected.take(6).joinToString("\n") { message ->
+            val who = message.title.ifBlank { "без имени" }
+            "• $who: ${message.text.take(220)}"
+        }
+        return "Найдено сообщений: ${selected.size} ($apps). Последние:\n$recent"
+    }
+
+    private fun requestSmartNotificationBrief(filter: String? = null) {
+        if (!skills.enabled("notifications")) {
+            showVoiceStatus("Включите навык умных уведомлений.")
+            return
+        }
+        val all = JarvisNotificationService.latest(60)
+        val selected = if (filter.isNullOrBlank()) all else all.filter {
+            it.title.contains(filter, ignoreCase = true) || it.text.contains(filter, ignoreCase = true)
+        }
+        if (selected.isEmpty()) {
+            val message = notificationDigest(all, filter)
+            runOnUiThread {
+                voiceEvent("onJarvisFeatureStatus", "notifications", message)
+                if (activityResumed) speak(message, resumeAfterSpeech = true)
+            }
+            return
+        }
+        val local = notificationDigest(selected)
+        if (!prefs.getBoolean("gigachat_share_messages", false) || !gigaChat.configured()) {
+            runOnUiThread {
+                voiceEvent("onJarvisFeatureStatus", "notifications", local)
+                if (activityResumed) speak(local, resumeAfterSpeech = true)
+            }
+            return
+        }
+        backgroundExecutor.execute {
+            val source = selected.take(18).joinToString("\n") { message ->
+                val app = when (message.packageName) {
+                    JarvisNotificationService.WHATSAPP, JarvisNotificationService.WHATSAPP_BUSINESS -> "WhatsApp"
+                    JarvisNotificationService.TELEGRAM -> "Telegram"
+                    else -> message.packageName
+                }
+                "$app | ${message.title.take(100)} | ${message.text.take(500)}"
+            }.take(7000)
+            val prompt = buildString {
+                append("Сделай короткую голосовую сводку сообщений пользователя. ")
+                append("Сначала назови, от кого и из какого приложения пришли сообщения. ")
+                append("Затем выдели только явно срочные, требующие ответа или действия сообщения; ")
+                append("не называй обычное сообщение важным без оснований. Не выдумывай факты. ")
+                if (!filter.isNullOrBlank()) append("Интересуют сообщения, связанные с: $filter. ")
+                append("\nДанные уведомлений:\n").append(source)
+            }
+            val response = gigaChat.askConversation(prompt, selectedPersona)
+            val answer = if (response.success && response.text.isNotBlank()) response.text else local
+            runOnUiThread {
+                if (isFinishing || isDestroyed) return@runOnUiThread
+                voiceEvent("onJarvisFeatureStatus", "notifications", answer)
+                voiceEvent("onGigaChatResult", answer)
+                if (activityResumed) speak(answer, resumeAfterSpeech = true)
+            }
+        }
+    }
+
+    private fun notificationCountForBriefing(): String {
+        val messages = JarvisNotificationService.latest(50)
+        if (messages.isEmpty()) return "Новых сохранённых сообщений нет."
+        val whatsapp = messages.count { JarvisNotificationService.isWhatsApp(it.packageName) }
+        val telegram = messages.count { it.packageName == JarvisNotificationService.TELEGRAM }
+        val senders = messages.map { it.title.trim() }.filter { it.isNotBlank() }.distinct().take(4)
+        return buildString {
+            append("Сообщения: ")
+            val parts = mutableListOf<String>()
+            if (whatsapp > 0) parts += "WhatsApp $whatsapp"
+            if (telegram > 0) parts += "Telegram $telegram"
+            if (parts.isEmpty()) append(messages.size) else append(parts.joinToString(", "))
+            if (senders.isNotEmpty()) append(". Последние отправители: ").append(senders.joinToString(", "))
+            append(".")
+        }
+    }
+
+    private fun requestBriefing(kind: AssistantFeaturePolicy.BriefingKind) {
+        if (!skills.enabled("briefing")) {
+            showVoiceStatus("Включите навык персонального брифинга.")
+            return
+        }
+        showVoiceStatus("Готовлю персональный брифинг…")
+        fun finishBriefing(weather: String) {
+            backgroundExecutor.execute {
+                val news = try { newsFeed.fetchMainHeadlines().take(3) } catch (_: Exception) { emptyList() }
+                val now = java.util.Date()
+                val date = java.text.SimpleDateFormat("d MMMM, HH:mm", Locale("ru", "RU")).format(now)
+                val userName = memory.getUserName().trim()
+                val greeting = when (kind) {
+                    AssistantFeaturePolicy.BriefingKind.MORNING -> "Доброе утро"
+                    AssistantFeaturePolicy.BriefingKind.EVENING -> "Добрый вечер"
+                    AssistantFeaturePolicy.BriefingKind.DAILY -> "Сводка на сегодня"
+                } + if (userName.isNotBlank()) ", $userName." else "."
+                val reminderText = reminders.list().replace('\n', ' ').take(700)
+                val taskText = tasks.summaryForBriefing().take(700)
+                val messageText = notificationCountForBriefing().take(500)
+                val newsText = if (news.isEmpty()) "Главные новости сейчас недоступны."
+                    else "Главные новости: " + news.joinToString("; ") { it.take(220) }
+                val answer = listOf(
+                    greeting,
+                    "Сейчас $date.",
+                    weather.take(700),
+                    taskText,
+                    reminderText,
+                    messageText,
+                    newsText
+                ).filter { it.isNotBlank() }.joinToString(" ").take(3600)
+                runOnUiThread {
+                    if (isFinishing || isDestroyed) return@runOnUiThread
+                    voiceEvent("onJarvisFeatureStatus", "briefing", answer)
+                    voiceEvent("onGigaChatResult", answer)
+                    if (activityResumed) speak(answer, resumeAfterSpeech = true)
+                }
+            }
+        }
+        if (hasApproximateLocation()) {
+            localInfo.requestWeather { finishBriefing(it) }
+        } else {
+            finishBriefing("Погода не добавлена: примерное местоположение не разрешено.")
+        }
+    }
+
 
     private fun fetchNewsAndSpeak() {
         showVoiceStatus("Получаю свежие новости…")
@@ -1247,6 +1389,37 @@ class MainActivity : Activity() {
         } catch (_: Exception) { showVoiceStatus("Выбор фото недоступен.") }
     }
 
+    private fun openCalendarView(): String {
+        runOnUiThread {
+            try {
+                val uri = CalendarContract.CONTENT_URI.buildUpon()
+                    .appendPath("time")
+                    .appendPath(System.currentTimeMillis().toString())
+                    .build()
+                startActivity(Intent(Intent.ACTION_VIEW, uri))
+            } catch (_: Exception) {
+                showVoiceStatus("На телефоне не найдено приложение календаря.")
+            }
+        }
+        return "Открываю календарь."
+    }
+
+    private fun createCalendarDraft(title: String): String {
+        val clean = title.trim().take(200)
+        if (clean.isBlank()) return "Скажите название события."
+        runOnUiThread {
+            try {
+                startActivity(Intent(Intent.ACTION_INSERT).apply {
+                    data = CalendarContract.Events.CONTENT_URI
+                    putExtra(CalendarContract.Events.TITLE, clean)
+                })
+            } catch (_: Exception) {
+                showVoiceStatus("Не удалось открыть создание события в календаре.")
+            }
+        }
+        return "Открываю календарь. Проверьте дату и время события «$clean» и подтвердите сохранение."
+    }
+
     private fun setFloatingOrb(enabled: Boolean) {
         val shortcutPrefs = getSharedPreferences("jarvis_features", MODE_PRIVATE)
         if (!enabled) {
@@ -1290,6 +1463,37 @@ class MainActivity : Activity() {
                 val parsed = JarvisReminders.parseRussian(memoryText)
                 if (parsed != null) return reminders.schedule(parsed.second, parsed.first)
             }
+
+            if (skills.enabled("tasks")) {
+                when (val action = AssistantFeaturePolicy.taskAction(memoryText)) {
+                    is AssistantFeaturePolicy.TaskAction.Add -> return tasks.add(action.title)
+                    AssistantFeaturePolicy.TaskAction.ListTasks -> return tasks.list()
+                    is AssistantFeaturePolicy.TaskAction.Complete -> return tasks.complete(action.id)
+                    is AssistantFeaturePolicy.TaskAction.Delete -> return tasks.delete(action.id)
+                    null -> Unit
+                }
+                AssistantFeaturePolicy.calendarDraftTitle(memoryText)?.let { return createCalendarDraft(it) }
+                if (AssistantFeaturePolicy.asksOpenCalendar(memoryText)) return openCalendarView()
+            }
+
+            AssistantFeaturePolicy.briefingKind(memoryText)?.let { kind ->
+                if (skills.enabled("briefing")) {
+                    requestBriefing(kind)
+                    return "Готовлю персональный брифинг…"
+                }
+            }
+
+            if (skills.enabled("notifications") && AssistantFeaturePolicy.asksNotificationBrief(memoryText)) {
+                val filter = AssistantFeaturePolicy.notificationPerson(memoryText)
+                requestSmartNotificationBrief(filter)
+                return if (filter.isNullOrBlank()) "Готовлю сводку сообщений…" else "Ищу сообщения от $filter…"
+            }
+
+            if (skills.enabled("vision") && AssistantFeaturePolicy.asksVisionCamera(memoryText)) {
+                runOnUiThread { openVisionCamera(true) }
+                return "Открываю камеру для локального анализа изображения."
+            }
+
             // Time/date are core local commands and must work regardless of
             // optional skill switches left over from an earlier build.
             OfflineKnowledge.answer(memoryText)?.let { return it }
@@ -1483,6 +1687,24 @@ class MainActivity : Activity() {
             else this@MainActivity.requestApproximateLocation(forLocalNews = true)
         }
         @JavascriptInterface fun requestNewsSummary() { this@MainActivity.fetchNewsAndSpeak() }
+        @JavascriptInterface fun requestBriefing(kind: String) {
+            val parsed = when (kind.lowercase()) {
+                "morning" -> AssistantFeaturePolicy.BriefingKind.MORNING
+                "evening" -> AssistantFeaturePolicy.BriefingKind.EVENING
+                else -> AssistantFeaturePolicy.BriefingKind.DAILY
+            }
+            this@MainActivity.requestBriefing(parsed)
+        }
+        @JavascriptInterface fun summarizeNotifications(filter: String) {
+            this@MainActivity.requestSmartNotificationBrief(filter.trim().take(80).ifBlank { null })
+        }
+        @JavascriptInterface fun openNotificationAccess() { runOnUiThread { openNotificationSettings() } }
+        @JavascriptInterface fun addTask(title: String): String = tasks.add(title)
+        @JavascriptInterface fun listTasks(): String = tasks.list()
+        @JavascriptInterface fun completeTask(id: Int): String = tasks.complete(id)
+        @JavascriptInterface fun deleteTask(id: Int): String = tasks.delete(id)
+        @JavascriptInterface fun openCalendar(): String = openCalendarView()
+        @JavascriptInterface fun createCalendarEvent(title: String): String = createCalendarDraft(title)
         @JavascriptInterface fun getInterruptByVoice(): Boolean = prefs.getBoolean("interrupt_voice", false)
         @JavascriptInterface fun setInterruptByVoice(enabled: Boolean) {
             prefs.edit().putBoolean("interrupt_voice", enabled).apply()
