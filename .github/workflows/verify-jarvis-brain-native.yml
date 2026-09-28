@@ -12,6 +12,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: jarvis-brain-native-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   brain-apk:
     runs-on: ubuntu-latest
