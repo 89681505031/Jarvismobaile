@@ -55,13 +55,15 @@ class WakeForegroundService : Service() {
     private lateinit var router: PhoneCommandRouter
     private var tts: TextToSpeech? = null
     private lateinit var fishAudioTts: FishAudioTts
-    private lateinit var gigaChat: GigaChatClient
     private lateinit var memory: JarvisMemory
+    private lateinit var modelStore: JarvisModelStore
+    private lateinit var localLanguageModel: JarvisNativeLanguageModel
+    private lateinit var brain: JarvisBrainEngine
     private lateinit var reminders: JarvisReminders
     private lateinit var home: JarvisHomeAssistant
     private val newsFeed = JarvisNewsFeed()
     private val infoExecutor = Executors.newSingleThreadExecutor()
-    private var cloudBusy = false
+    private var backgroundBusy = false
     private var ttsReady = false
     private var speaking = false
     private var suppressUntil = 0L
@@ -112,8 +114,10 @@ class WakeForegroundService : Service() {
         super.onCreate()
         router = PhoneCommandRouter(this)
         fishAudioTts = FishAudioTts(this)
-        gigaChat = GigaChatClient(this)
         memory = JarvisMemory(this)
+        modelStore = JarvisModelStore(this)
+        localLanguageModel = JarvisNativeLanguageModel(modelStore)
+        brain = JarvisBrainEngine(memory, localLanguageModel)
         reminders = JarvisReminders(this)
         home = JarvisHomeAssistant(this)
         offline = OfflineWakeEngine(
@@ -263,7 +267,7 @@ class WakeForegroundService : Service() {
 
     private fun onWake(match: WakeWordMatcher.Activation) {
         if (shuttingDown || !shouldListenInBackground || !foreground) return
-        if (cloudBusy || speaking || SystemClock.elapsedRealtime() < suppressUntil) return
+        if (backgroundBusy || speaking || SystemClock.elapsedRealtime() < suppressUntil) return
         // A wake name is required before any background action.
         getSharedPreferences("jarvis_settings", MODE_PRIVATE).edit()
             .putString("persona", match.persona).apply()
@@ -288,7 +292,7 @@ class WakeForegroundService : Service() {
 
     private fun onFollowUp(phrase: String) {
         if (shuttingDown || !shouldListenInBackground || !foreground) return
-        if (cloudBusy || speaking || SystemClock.elapsedRealtime() < suppressUntil) return
+        if (backgroundBusy || speaking || SystemClock.elapsedRealtime() < suppressUntil) return
         if (armedUntil == 0L || SystemClock.elapsedRealtime() > armedUntil) {
             armedUntil = 0L
             return
@@ -387,28 +391,21 @@ class WakeForegroundService : Service() {
             return
         }
 
-        // Ordinary questions no longer force the app open: GigaChat can answer
-        // directly from the foreground microphone service.
-        if (gigaChat.configured()) {
-            askGigaChatInBackground(phrase)
-        } else {
-            deferToVisibleApp(
-                phrase,
-                "GigaChat ещё не подключён. Откройте JARVIS и настройте мозг GigaChat."
-            )
-        }
+        // Ordinary questions are handled by the same first-party local brain
+        // used by MainActivity, so minimized mode does not depend on cloud AI.
+        askJarvisBrainInBackground(phrase)
     }
 
     private fun runBackgroundTask(status: String, work: () -> String) {
-        if (cloudBusy || shuttingDown) return
-        cloudBusy = true
+        if (backgroundBusy || shuttingDown) return
+        backgroundBusy = true
         notificationText = status
         updateNotification()
         infoExecutor.execute {
             val response = try { work() } catch (_: Exception) { "Не удалось выполнить команду." }
             ui.post {
                 if (shuttingDown) return@post
-                cloudBusy = false
+                backgroundBusy = false
                 notificationText = response.take(220)
                 updateNotification()
                 speak(response)
@@ -416,24 +413,29 @@ class WakeForegroundService : Service() {
         }
     }
 
-    private fun askGigaChatInBackground(phrase: String) {
-        if (cloudBusy || shuttingDown) return
-        cloudBusy = true
+    private fun askJarvisBrainInBackground(phrase: String) {
+        if (backgroundBusy || shuttingDown) return
+        backgroundBusy = true
         pendingCommand = null
-        notificationText = "GigaChat думает…"
+        notificationText = "JARVIS BRAIN думает локально…"
         updateNotification()
-        val settings = getSharedPreferences("jarvis_settings", MODE_PRIVATE)
-        val persona = settings.getString("persona", "J.A.R.V.I.S.").orEmpty()
-        val useMemory = settings.getBoolean("gigachat_memory_enabled", false)
+        val persona = getSharedPreferences("jarvis_settings", MODE_PRIVATE)
+            .getString("persona", "J.A.R.V.I.S.").orEmpty()
 
         infoExecutor.execute {
-            val context = if (useMemory) memory.approvedBrainFacts(phrase) else ""
-            val turns = if (useMemory) memory.recentDialogues().takeLast(6) else emptyList()
-            val response = gigaChat.askConversation(phrase.take(4000), persona, context, turns)
+            val response = try {
+                brain.ask(phrase.take(4000), persona)
+            } catch (_: Exception) {
+                JarvisBrainEngine.Result(
+                    success = false,
+                    text = "Не удалось получить локальный ответ JARVIS BRAIN.",
+                    source = JarvisBrainEngine.Source.LOCAL_FALLBACK
+                )
+            }
             if (response.success) memory.rememberTurn(phrase, response.text)
             ui.post {
                 if (shuttingDown) return@post
-                cloudBusy = false
+                backgroundBusy = false
                 notificationText = response.text.take(220)
                 updateNotification()
                 speak(response.text)
@@ -449,30 +451,24 @@ class WakeForegroundService : Service() {
     }
 
     private fun fetchBackgroundNews() {
-        if (cloudBusy || shuttingDown) return
-        cloudBusy = true
+        if (backgroundBusy || shuttingDown) return
+        backgroundBusy = true
         pendingCommand = null
         notificationText = "Получаю главную сводку новостей…"
         updateNotification()
         speak("Получаю главные новости")
 
-        val persona = getSharedPreferences("jarvis_settings", MODE_PRIVATE)
-            .getString("persona", "J.A.R.V.I.S.").orEmpty()
-
         infoExecutor.execute {
             val summary = try {
                 val items = newsFeed.fetchMainHeadlines()
-                val prompt = JarvisNewsSummary.prompt(items)
-                val response = gigaChat.askConversation(prompt, persona)
-                if (response.success && JarvisNewsSummary.usableModelSummary(response.text)) response.text
-                else JarvisNewsSummary.fallback(items)
+                JarvisNewsSummary.fallback(items)
             } catch (_: Exception) {
                 "Не удалось получить главные новости. Проверьте интернет и повторите."
             }
 
             ui.post {
                 if (shuttingDown) return@post
-                cloudBusy = false
+                backgroundBusy = false
                 notificationText = summary.take(220)
                 updateNotification()
                 speak(summary)
@@ -613,6 +609,9 @@ class WakeForegroundService : Service() {
         ui.removeCallbacksAndMessages(null)
         try { offline.release() } catch (_: Exception) {}
         try { infoExecutor.shutdownNow() } catch (_: Exception) {}
+        if (::localLanguageModel.isInitialized) {
+            try { localLanguageModel.unload() } catch (_: Exception) {}
+        }
         try { fishAudioTts.release() } catch (_: Exception) {}
         try { tts?.stop(); tts?.shutdown() } catch (_: Exception) {}
         active = null
