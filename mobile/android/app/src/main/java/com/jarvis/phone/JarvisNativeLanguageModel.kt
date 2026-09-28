@@ -53,10 +53,12 @@ class JarvisNativeLanguageModel(
                     loadedPath = file.absolutePath
                 }
 
-                val output = nativeGenerate(
-                    prompt = prompt.take(18_000),
-                    maxNewTokens = maxNewTokens.coerceIn(32, 1024)
-                ).orEmpty().trim()
+                val output = cleanOutput(
+                    nativeGenerate(
+                        prompt = prompt.take(18_000),
+                        maxNewTokens = maxNewTokens.coerceIn(32, 1024)
+                    ).orEmpty()
+                )
 
                 if (output.isBlank()) {
                     JarvisLanguageModel.Generation(
@@ -78,6 +80,17 @@ class JarvisNativeLanguageModel(
                 )
             }
         }
+    }
+
+    private fun cleanOutput(raw: String): String {
+        var text = raw.trim()
+        // Qwen3 may still emit an empty/short thinking wrapper when the
+        // soft /no_think switch is used through a generic GGUF template.
+        text = text.replace(
+            Regex("^\\s*<think>[\\s\\S]*?</think>\\s*", RegexOption.IGNORE_CASE),
+            ""
+        ).trim()
+        return text
     }
 
     fun unload() {
