@@ -43,6 +43,7 @@ class MainActivity : Activity() {
     private lateinit var gigaChat: GigaChatClient
     private lateinit var brain: JarvisBrainEngine
     private lateinit var modelStore: JarvisModelStore
+    private lateinit var localLanguageModel: JarvisNativeLanguageModel
     private val brainGeneration = AtomicInteger(0)
     private val brainTestRunning = AtomicBoolean(false)
     private lateinit var speechInput: SpeechInputController
@@ -128,7 +129,8 @@ class MainActivity : Activity() {
         fishAudioTts = FishAudioTts(this)
         memory = JarvisMemory(this)
         modelStore = JarvisModelStore(this)
-        brain = JarvisBrainEngine(memory)
+        localLanguageModel = JarvisNativeLanguageModel(modelStore)
+        brain = JarvisBrainEngine(memory, localLanguageModel)
         cloudMemory = RedisMemoryGateway(this)
         tts = TextToSpeech(this) { status ->
             ttsReady = status == TextToSpeech.SUCCESS
@@ -1635,7 +1637,8 @@ class MainActivity : Activity() {
                 put("modelValid", info.validGguf)
                 put("modelBytes", info.bytes)
                 put("modelSize", modelStore.humanSize(info.bytes))
-                put("neuralModelInstalled", false)
+                put("neuralModelInstalled", localLanguageModel.isReady())
+                put("modelLabel", localLanguageModel.modelLabel())
                 put("legacyGigaConfigured", gigaChat.configured())
             }.toString()
         }
@@ -1647,6 +1650,7 @@ class MainActivity : Activity() {
 
         @JavascriptInterface
         fun removeJarvisBrainModel(): String {
+            localLanguageModel.unload()
             val removed = modelStore.remove()
             brainGeneration.incrementAndGet()
             return if (removed) {
