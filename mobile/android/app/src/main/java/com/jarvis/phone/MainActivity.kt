@@ -1012,10 +1012,7 @@ class MainActivity : Activity() {
         backgroundExecutor.execute {
             val finalText = try {
                 val items = newsFeed.fetchMainHeadlines()
-                val prompt = JarvisNewsSummary.prompt(items)
-                val response = gigaChat.askConversation(prompt, selectedPersona)
-                if (response.success && JarvisNewsSummary.usableModelSummary(response.text)) response.text
-                else JarvisNewsSummary.fallback(items)
+                JarvisNewsSummary.fallback(items)
             } catch (_: Exception) {
                 "Не удалось получить свежие новости. Проверьте интернет и повторите запрос."
             }
@@ -1084,10 +1081,7 @@ class MainActivity : Activity() {
                     if (headlines.isEmpty()) {
                         "Не нашёл свежих местных заголовков для ${place.label}."
                     } else {
-                        val prompt = JarvisNewsSummary.prompt(headlines, place.label)
-                        val response = gigaChat.askConversation(prompt, selectedPersona)
-                        if (response.success && JarvisNewsSummary.usableModelSummary(response.text)) response.text
-                        else JarvisNewsSummary.fallback(headlines, place.label)
+                        JarvisNewsSummary.fallback(headlines, place.label)
                     }
                 },
                 onFailure = {
