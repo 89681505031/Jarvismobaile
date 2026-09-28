@@ -1102,39 +1102,26 @@ class MainActivity : Activity() {
                 val notification = JarvisNotificationService.latest(30)
                     .firstOrNull { JarvisNotificationService.isWhatsApp(it.packageName) }
                 val screen = if (notification == null) {
-                    JarvisAccessibilityService.instance?.visibleText(setOf("com.whatsapp", "com.whatsapp.w4b")).orEmpty()
+                    JarvisAccessibilityService.instance
+                        ?.visibleText(setOf("com.whatsapp", "com.whatsapp.w4b"))
+                        .orEmpty()
                 } else {
                     ""
                 }
-                val source = buildString {
-                    if (notification != null) {
-                        append("Последнее уведомление WhatsApp. Отправитель/чат: ")
-                        append(notification.title)
-                        append(". Текст: ")
-                        append(notification.text)
-                    }
-                    if (screen.isNotBlank()) {
-                        if (isNotEmpty()) append("\n\n")
-                        append("Текст, видимый на открытом экране WhatsApp:\n")
-                        append(screen.take(8000))
-                    }
-                }.trim()
 
-                val answer = if (source.isBlank()) {
-                    "Я открыл WhatsApp, но не смог получить текст последнего сообщения. Проверьте доступ J.A.R.V.I.S. к уведомлениям и специальным возможностям."
-                } else {
-                    val prompt = "Проанализируй последнее сообщение WhatsApp по данным ниже. Ответь по-русски коротко и естественно для голосового ассистента. Обязательно назови имя отправителя или название группы, если оно видно. Затем объясни простыми словами, о чём сообщение, что человек или группа сообщает, просит или хочет. Не выдумывай отсутствующие сведения и скажи, если данных недостаточно. Данные WhatsApp:\n" + source
-                    if (!prefs.getBoolean("gigachat_share_messages", false)) {
-                        "Последнее сообщение без облачного анализа:\n" +
-                            source.take(800) +
-                            "\nЧтобы отправить текст для анализа GigaChat, включите отдельное разрешение в настройках."
-                    } else gigaChat.askConversation(prompt, selectedPersona).text
-                }
+                val answer = JarvisMessageAnalyzer.summarize(
+                    senderOrChat = notification?.title.orEmpty(),
+                    message = notification?.text.orEmpty(),
+                    visibleScreenText = screen
+                )
 
                 runOnUiThread {
                     if (isFinishing || isDestroyed) return@runOnUiThread
                     if (::webView.isInitialized) {
-                        webView.evaluateJavascript("window.onGigaChatResult && window.onGigaChatResult(${JSONObject.quote(answer)})", null)
+                        webView.evaluateJavascript(
+                            "window.onGigaChatResult && window.onGigaChatResult(${JSONObject.quote(answer)})",
+                            null
+                        )
                     }
                     speak(answer, resumeAfterSpeech = true)
                 }
