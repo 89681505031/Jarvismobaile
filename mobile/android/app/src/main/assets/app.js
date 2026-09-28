@@ -289,7 +289,7 @@ $('skipRegistration').onclick=()=>{localStorage.setItem('jarvisOnboarded','1');l
 
   window.onJarvisBrainModelStatus=(phase,text)=>{
     if(modelStatus) modelStatus.textContent=String(text||'Статус модели обновлён.');
-    if(phase==='stored'||phase==='removed') setTimeout(refresh,250);
+    if(phase==='stored'||phase==='removed') deferUi(refresh,250);
   };
 
   if(choose) choose.onclick=()=>{
@@ -305,7 +305,7 @@ $('skipRegistration').onclick=()=>{localStorage.setItem('jarvisOnboarded','1');l
 
   if(clear) clear.onclick=()=>{
     info.textContent=window.AndroidJarvis?.clearGigaBrainHistory?.()||'Недоступно';
-    setTimeout(refresh,900);
+    deferUi(refresh,900);
   };
 
   refresh();
