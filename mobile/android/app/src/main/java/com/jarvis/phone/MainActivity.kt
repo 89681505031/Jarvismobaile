@@ -33,6 +33,7 @@ import java.net.URL
 import java.util.Locale
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.math.sqrt
 
 class MainActivity : Activity() {
@@ -43,6 +44,7 @@ class MainActivity : Activity() {
     private lateinit var modelStore: JarvisModelStore
     private lateinit var localLanguageModel: JarvisNativeLanguageModel
     private val brainGeneration = AtomicInteger(0)
+    private val modelDownloadRunning = AtomicBoolean(false)
     private lateinit var speechInput: SpeechInputController
     private lateinit var offlineWake: OfflineWakeEngine
     private var pendingMicStart = false
@@ -97,6 +99,7 @@ class MainActivity : Activity() {
     @Volatile private var activityResumed = false
     private val prefs by lazy { getSharedPreferences("jarvis_settings", MODE_PRIVATE) }
     private val backgroundExecutor = Executors.newSingleThreadExecutor()
+    private val modelExecutor = Executors.newSingleThreadExecutor()
     private val mainHandler = Handler(Looper.getMainLooper())
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -1623,8 +1626,10 @@ class MainActivity : Activity() {
                 put("modelValid", info.validGguf)
                 put("modelBytes", info.bytes)
                 put("modelSize", modelStore.humanSize(info.bytes))
+                put("modelProfileId", info.profileId)
+                put("modelLabel", info.label)
+                put("modelDownloadRunning", modelDownloadRunning.get())
                 put("neuralModelInstalled", localLanguageModel.isReady())
-                put("modelLabel", localLanguageModel.modelLabel())
             }.toString()
         }
 
@@ -1634,7 +1639,74 @@ class MainActivity : Activity() {
         }
 
         @JavascriptInterface
+        fun downloadJarvisBrainModel(profileId: String): String {
+            val profile = modelStore.profile(profileId)
+                ?: return "Неизвестный профиль локальной модели."
+            if (!modelDownloadRunning.compareAndSet(false, true)) {
+                return "Загрузка модели уже выполняется."
+            }
+
+            localLanguageModel.unload()
+            brainGeneration.incrementAndGet()
+            runOnUiThread {
+                voiceEvent(
+                    "onJarvisBrainModelDownload",
+                    "starting",
+                    "Начинаю загрузку: ${profile.label}"
+                )
+            }
+
+            modelExecutor.execute {
+                var lastUiAt = 0L
+                val result = modelStore.downloadProfile(profile.id) { progress ->
+                    val now = SystemClock.elapsedRealtime()
+                    if (now - lastUiAt >= 500L || progress.percent >= 100) {
+                        lastUiAt = now
+                        val text = if (progress.percent >= 0) {
+                            "Загрузка ${profile.label}: ${progress.percent}% · " +
+                                modelStore.humanSize(progress.downloadedBytes) + " / " +
+                                modelStore.humanSize(progress.totalBytes)
+                        } else {
+                            "Загрузка ${profile.label}: " +
+                                modelStore.humanSize(progress.downloadedBytes)
+                        }
+                        runOnUiThread {
+                            if (!isFinishing && !isDestroyed) {
+                                voiceEvent("onJarvisBrainModelDownload", "progress", text)
+                            }
+                        }
+                    }
+                }
+
+                modelDownloadRunning.set(false)
+                runOnUiThread {
+                    if (isFinishing || isDestroyed) return@runOnUiThread
+                    result.fold(
+                        onSuccess = { info ->
+                            brainGeneration.incrementAndGet()
+                            val text = (info.label.ifBlank { "GGUF-модель" }) +
+                                " установлена локально · " + modelStore.humanSize(info.bytes) +
+                                ". JARVIS BRAIN готов к офлайн-диалогу."
+                            voiceEvent("onJarvisBrainModelDownload", "stored", text)
+                            voiceEvent("onJarvisBrainModelStatus", "stored", text)
+                            showVoiceStatus(text)
+                        },
+                        onFailure = { error ->
+                            val text = error.message ?: "Не удалось загрузить локальную модель."
+                            voiceEvent("onJarvisBrainModelDownload", "error", text)
+                            voiceEvent("onJarvisBrainModelStatus", "error", text)
+                            showVoiceStatus(text)
+                        }
+                    )
+                }
+            }
+
+            return "Загрузка ${profile.label} запущена."
+        }
+
+        @JavascriptInterface
         fun removeJarvisBrainModel(): String {
+            if (modelDownloadRunning.get()) return "Сначала дождитесь завершения загрузки модели."
             localLanguageModel.unload()
             val removed = modelStore.remove()
             brainGeneration.incrementAndGet()
@@ -1702,6 +1774,7 @@ class MainActivity : Activity() {
         diagnosticGeneration++
         mainHandler.removeCallbacksAndMessages(null)
         backgroundExecutor.shutdownNow()
+        modelExecutor.shutdownNow()
         if (::localLanguageModel.isInitialized) localLanguageModel.unload()
         speechInput.destroy()
         tts?.stop()
