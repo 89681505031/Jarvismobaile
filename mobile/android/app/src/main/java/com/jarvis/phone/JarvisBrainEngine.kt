@@ -92,7 +92,7 @@ class JarvisBrainEngine(
         memory.recentDialogues().takeLast(4).forEach { turn ->
             selectedTurns[turn.first + "\u0000" + turn.second] = turn
         }
-        val turns = selectedTurns.values.takeLast(8)
+        val turns = selectedTurns.values.toList().takeLast(8)
             .joinToString("\n") { (user, assistant) ->
                 "Пользователь: ${user.take(900)}\nJARVIS: ${assistant.take(1200)}"
             }
