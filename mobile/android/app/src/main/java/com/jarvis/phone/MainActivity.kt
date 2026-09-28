@@ -41,6 +41,7 @@ class MainActivity : Activity() {
     private lateinit var webView: WebView
     private lateinit var router: PhoneCommandRouter
     private lateinit var gigaChat: GigaChatClient
+    private lateinit var brain: JarvisBrainEngine
     private val brainGeneration = AtomicInteger(0)
     private val brainTestRunning = AtomicBoolean(false)
     private lateinit var speechInput: SpeechInputController
@@ -125,6 +126,7 @@ class MainActivity : Activity() {
             ?.getStringExtra(WakeForegroundService.EXTRA_COMMAND)?.take(240)
         fishAudioTts = FishAudioTts(this)
         memory = JarvisMemory(this)
+        brain = JarvisBrainEngine(memory)
         cloudMemory = RedisMemoryGateway(this)
         tts = TextToSpeech(this) { status ->
             ttsReady = status == TextToSpeech.SUCCESS
@@ -1156,40 +1158,33 @@ class MainActivity : Activity() {
     }
 
     /**
-     * All non-device questions are answered by GigaChat. Android commands still
-     * use the native permission-aware router; the model cannot silently call APIs.
+     * Legacy method name kept for the WebView bridge, but ordinary free-form
+     * questions are now answered by first-party JARVIS BRAIN on the device.
      */
     private fun sendToGigaChat(text: String, memoryText: String = text) {
         val ticket = brainGeneration.incrementAndGet()
         val persona = selectedPersona
         runOnUiThread {
-            voiceEvent("onJarvisBrainState", "thinking", "GigaChat обрабатывает вопрос…")
+            voiceEvent("onJarvisBrainState", "thinking", "JARVIS BRAIN думает локально…")
         }
         backgroundExecutor.execute {
-            val useHistory = prefs.getBoolean("gigachat_memory_enabled", false)
-            val turns = if (useHistory) memory.recentDialogues().takeLast(6) else emptyList()
-            val remote = if (useHistory) cloudMemory.recall(memoryText).take(2500) else ""
-            val context = if (!useHistory) "" else buildString {
-                append(memory.approvedBrainFacts(memoryText))
-                if (remote.isNotBlank()) append("\nРелевантные заметки:\n").append(remote)
-            }
-            val response = gigaChat.askConversation(memoryText, persona, context, turns)
-            // If a second question was asked during this one, only deliver the
-            // newest result. In particular, don't speak stale voice replies.
+            val response = brain.ask(memoryText, persona)
             if (ticket != brainGeneration.get()) return@execute
+
             if (response.success) {
                 memory.rememberTurn(memoryText, response.text)
-                if (useHistory) cloudMemory.record(memoryText, response.text)
             }
+
             runOnUiThread {
                 if (ticket != brainGeneration.get() || isFinishing || isDestroyed) return@runOnUiThread
                 voiceEvent(
                     "onJarvisBrainState",
-                    if (response.success) "ready" else "error",
-                    if (response.success) "Ответ GigaChat получен" else response.text
+                    if (response.success) "ready" else "local_model_required",
+                    if (response.success) "Локальный ответ JARVIS BRAIN готов" else response.text
                 )
+                // Keep the old JS event name until the web UI is migrated.
                 voiceEvent("onGigaChatResult", response.text)
-                if (response.success) speak(response.text, resumeAfterSpeech = true)
+                speak(response.text, resumeAfterSpeech = true)
             }
         }
     }
