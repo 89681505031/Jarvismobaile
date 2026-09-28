@@ -85,7 +85,14 @@ class JarvisBrainEngine(
             else -> "J.A.R.V.I.S.: универсальный персональный помощник."
         }
         val facts = memory.approvedBrainFacts(query).take(8000)
-        val turns = memory.recentDialogues().takeLast(6)
+        val selectedTurns = LinkedHashMap<String, Pair<String, String>>()
+        memory.relevantDialogues(query, 6).forEach { turn ->
+            selectedTurns[turn.first + "\u0000" + turn.second] = turn
+        }
+        memory.recentDialogues().takeLast(4).forEach { turn ->
+            selectedTurns[turn.first + "\u0000" + turn.second] = turn
+        }
+        val turns = selectedTurns.values.takeLast(8)
             .joinToString("\n") { (user, assistant) ->
                 "Пользователь: ${user.take(900)}\nJARVIS: ${assistant.take(1200)}"
             }
@@ -99,7 +106,7 @@ class JarvisBrainEngine(
                 append("\nЛокальная долговременная память:\n").append(facts).append("\n")
             }
             if (turns.isNotBlank()) {
-                append("\nНедавний разговор:\n").append(turns).append("\n")
+                append("\nРелевантные и недавние эпизоды памяти:\n").append(turns).append("\n")
             }
             append("\nТекущий вопрос пользователя:\n").append(query)
             append("\n\nОтвет JARVIS:")
