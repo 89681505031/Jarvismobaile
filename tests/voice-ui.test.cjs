@@ -220,6 +220,22 @@ test('built-in local model buttons select the expected verified profiles',()=>{
   assert.match(elements.get('brainModelStatus').textContent,/установлена локально/);
 });
 
+test('local brain self-test runs through Android bridge and reports timing',()=>{
+  const {context,elements}=load();
+  const calls=[];
+  context.window.AndroidJarvis.testJarvisBrainModel=()=>{
+    calls.push('test');
+    return 'Самопроверка JARVIS BRAIN запущена.';
+  };
+  elements.get('testBrainModel').onclick();
+  assert.deepEqual(calls,['test']);
+  assert.match(elements.get('brainModelStatus').textContent,/Самопроверка/);
+  context.window.onJarvisBrainSelfTest('running','Загружаю локальную модель в RAM…');
+  assert.match(elements.get('brainModelStatus').textContent,/RAM/);
+  context.window.onJarvisBrainSelfTest('success','Самотест пройден за 1.2 с.');
+  assert.match(elements.get('brainModelStatus').textContent,/1\.2 с/);
+});
+
 test('local GGUF status is explicit and model removal stays on-device',()=>{
   const {context,elements}=load();
   const calls=[];
