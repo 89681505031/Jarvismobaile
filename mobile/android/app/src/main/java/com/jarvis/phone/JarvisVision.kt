@@ -10,6 +10,7 @@ import com.google.mlkit.vision.label.defaults.ImageLabelerOptions
 import com.google.mlkit.vision.text.TextRecognition
 import com.google.mlkit.vision.text.cyrillic.CyrillicTextRecognizerOptions
 import com.google.mlkit.vision.text.latin.TextRecognizerOptions
+import java.util.concurrent.atomic.AtomicInteger
 
 /**
  * Explicit camera/gallery choice only. Images stay on device.
@@ -31,15 +32,13 @@ class JarvisVision(private val context: Context) {
         val cyrillic = TextRecognition.getClient(CyrillicTextRecognizerOptions.Builder().build())
         val barcodes = BarcodeScanning.getClient()
 
-        var complete = 0
+        val complete = AtomicInteger(0)
         var objects = ""
         val texts = linkedSetOf<String>()
         val codes = linkedSetOf<String>()
 
-        @Synchronized
         fun finish() {
-            complete++
-            if (complete != 4) return
+            if (complete.incrementAndGet() != 4) return
             val output = mutableListOf<String>()
             if (objects.isNotBlank()) output += objects
             if (texts.isNotEmpty()) output += "Распознанный текст: " + texts.joinToString(" · ").take(1800)
