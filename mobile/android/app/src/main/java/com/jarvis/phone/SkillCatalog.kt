@@ -10,7 +10,10 @@ class SkillCatalog(context: Context) {
     private val definitions = listOf(
         "offline" to "Офлайн: время и дата",
         "reminders" to "Локальные напоминания",
-        "vision" to "Офлайн-зрение (снимки пользователя)",
+        "tasks" to "Локальные задачи и календарь",
+        "notifications" to "Умные сводки уведомлений",
+        "briefing" to "Персональный брифинг",
+        "vision" to "Расширенное офлайн-зрение",
         "home" to "Home Assistant: только выбранный свет",
         "overlay" to "Плавающая кнопка"
     )
