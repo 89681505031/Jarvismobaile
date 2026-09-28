@@ -1593,6 +1593,17 @@ class MainActivity : Activity() {
         }
 
         @JavascriptInterface
+        fun getJarvisBrainStatus(): String = JSONObject().apply {
+            put("engine", "JARVIS BRAIN")
+            put("version", "0.1")
+            put("mode", "local")
+            put("networkRequired", false)
+            put("memoryLocal", true)
+            put("neuralModelInstalled", false)
+            put("legacyGigaConfigured", gigaChat.configured())
+        }.toString()
+
+        @JavascriptInterface
         fun getGigaBrainStatus(): String = JSONObject().apply {
             put("configured", gigaChat.configured())
             put("model", gigaChat.modelName())
