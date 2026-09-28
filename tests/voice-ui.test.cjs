@@ -190,57 +190,41 @@ test('PLUS local vision only starts after a user tap', () => {
   assert.equal(taps,2);
 });
 
-test('GigaChat brain is visible, never shows the secret, and can be tested explicitly', () => {
+test('JARVIS BRAIN is local and exposes the GGUF picker without a cloud key', () => {
   const { context, elements } = load();
-  const calls = [];
-  context.window.AndroidJarvis.configureGigaChatBrain = (key,scope,model) => {
-    calls.push({key,scope,model});
-    return 'GigaChat настроен';
+  const calls=[];
+  context.window.AndroidJarvis.chooseJarvisBrainModel=()=>calls.push('choose');
+  assert.match(elements.get('brainBadge').textContent,/JARVIS BRAIN/);
+  assert.match(elements.get('brainBadge').textContent,/ЛОКАЛЬНО/);
+  elements.get('chooseBrainModel').onclick();
+  assert.deepEqual(calls,['choose']);
+  context.window.onJarvisBrainState('thinking','JARVIS BRAIN думает локально…');
+  assert.match(elements.get('brainBadge').textContent,/ДУМАЕТ/);
+  context.window.onJarvisBrainState('ready','Локальный ответ готов');
+  assert.match(elements.get('brainBadge').textContent,/ЛОКАЛЬНО/);
+});
+
+test('local GGUF status is explicit and model removal stays on-device',()=>{
+  const {context,elements}=load();
+  const calls=[];
+  context.window.AndroidJarvis.removeJarvisBrainModel=()=>{
+    calls.push('remove'); return 'Локальный файл модели удалён.';
   };
-  context.window.AndroidJarvis.testGigaChatBrain = () => calls.push('test');
-  const key=context.document.getElementById('gigaApiKey');
-  key.value = 'example-secret-never-display';
-  context.document.getElementById('gigaScope').value='GIGACHAT_API_PERS';
-  context.document.getElementById('gigaModel').value='GigaChat-2';
-  context.document.getElementById('saveGigaBrain').onclick();
-  assert.deepEqual(calls, [{key:'example-secret-never-display',
-    scope:'GIGACHAT_API_PERS', model:'GigaChat-2'}]);
-  assert.equal(key.value,'');
-  assert.ok(!context.document.getElementById('brainStatus').textContent.includes('example-secret'));
-  context.document.getElementById('testGigaBrain').onclick();
-  assert.equal(calls.length,2);
-  assert.equal(calls[1],'test');
-  assert.equal(context.document.getElementById('testGigaBrain').disabled,true);
-  context.window.onJarvisBrainState('connected','GigaChat подключён');
-  assert.equal(context.document.getElementById('testGigaBrain').disabled,false);
-  assert.match(context.document.getElementById('brainBadge').textContent,/НА СВЯЗИ/);
+  context.window.onJarvisBrainModelStatus('stored','GGUF сохранён локально · 900 МБ');
+  assert.match(elements.get('brainModelStatus').textContent,/GGUF сохранён локально/);
+  elements.get('removeBrainModel').onclick();
+  assert.deepEqual(calls,['remove']);
+  assert.match(elements.get('brainModelStatus').textContent,/удалён/);
 });
-test('GigaChat memory and message sharing remain opt-in and independently switchable',()=>{
-  const {context}=load();
-  const prefs=[];
-  context.window.AndroidJarvis.setGigaBrainMemory = enabled => prefs.push(['memory',enabled]);
-  context.window.AndroidJarvis.setGigaShareMessages = enabled => prefs.push(['messages',enabled]);
-  const memory=context.document.getElementById('gigaBrainMemory');
-  const share=context.document.getElementById('gigaShareMessages');
-  assert.equal(memory.checked,false);
-  assert.equal(share.checked,false);
-  memory.onchange({target:{checked:true}});
-  share.onchange({target:{checked:false}});
-  assert.deepEqual(prefs,[['memory',true],['messages',false]]);
-});
-test('GigaChat disconnect never deletes local chat history automatically',()=>{
+
+test('local chat history is cleared only by the explicit history button',()=>{
   const {context}=load();
   const calls=[];
-  context.window.AndroidJarvis.disconnectGigaChatBrain = () => {
-    calls.push('disconnect'); return 'Ключ удалён; история осталась';
-  };
-  context.window.AndroidJarvis.clearGigaBrainHistory = () => {
+  context.window.AndroidJarvis.clearGigaBrainHistory=()=>{
     calls.push('history'); return 'Очищено';
   };
-  context.document.getElementById('disconnectGigaBrain').onclick();
-  assert.deepEqual(calls,['disconnect']);
-  context.document.getElementById('clearGigaHistory').onclick();
-  assert.deepEqual(calls,['disconnect','history']);
+  context.document.getElementById('clearBrainHistory').onclick();
+  assert.deepEqual(calls,['history']);
 });
 
 test('weather and local news request only user-initiated approximate location access',()=>{
