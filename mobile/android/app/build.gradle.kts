@@ -19,6 +19,12 @@ android {
         if (System.getenv("JARVIS_ARM64_ONLY") == "1") {
             ndk { abiFilters.add("arm64-v8a") }
         }
+        externalNativeBuild {
+            cmake {
+                val fullBrain = if (System.getenv("JARVIS_DIAGNOSTIC") == "1") "OFF" else "ON"
+                arguments.add("-DJARVIS_BRAIN_NATIVE=$fullBrain")
+            }
+        }
     }
 
     // Optional isolated package for real-device microphone tests; never replaces
