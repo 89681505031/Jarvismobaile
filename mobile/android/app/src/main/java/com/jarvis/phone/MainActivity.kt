@@ -100,6 +100,7 @@ class MainActivity : Activity() {
     @Volatile private var activityResumed = false
     private val prefs by lazy { getSharedPreferences("jarvis_settings", MODE_PRIVATE) }
     private val backgroundExecutor = Executors.newSingleThreadExecutor()
+    private val brainExecutor = Executors.newSingleThreadExecutor()
     private val modelExecutor = Executors.newSingleThreadExecutor()
     private val mainHandler = Handler(Looper.getMainLooper())
 
@@ -1197,8 +1198,22 @@ class MainActivity : Activity() {
         runOnUiThread {
             voiceEvent("onJarvisBrainState", "thinking", "JARVIS BRAIN думает локально…")
         }
-        backgroundExecutor.execute {
+
+        val watchdog = Runnable {
+            if (ticket != brainGeneration.get() || isFinishing || isDestroyed) return@Runnable
+            brainGeneration.incrementAndGet()
+            val timeoutText =
+                "Сэр, локальная модель не успела ответить за 5 секунд. " +
+                "Для быстрого режима выберите JARVIS Lite и нажмите «Проверить мозг»."
+            voiceEvent("onJarvisBrainState", "ready", timeoutText)
+            voiceEvent("onJarvisBrainResult", timeoutText)
+            speak(timeoutText, resumeAfterSpeech = true)
+        }
+        mainHandler.postDelayed(watchdog, 5_500L)
+
+        brainExecutor.execute {
             val response = brain.ask(memoryText, persona)
+            mainHandler.removeCallbacks(watchdog)
             if (ticket != brainGeneration.get()) return@execute
 
             if (response.success) {
@@ -1207,9 +1222,10 @@ class MainActivity : Activity() {
 
             runOnUiThread {
                 if (ticket != brainGeneration.get() || isFinishing || isDestroyed) return@runOnUiThread
+                val phase = if (response.success || brain.neuralModelReady()) "ready" else "local_model_required"
                 voiceEvent(
                     "onJarvisBrainState",
-                    if (response.success) "ready" else "local_model_required",
+                    phase,
                     if (response.success) "Локальный ответ JARVIS BRAIN готов" else response.text
                 )
                 voiceEvent("onJarvisBrainResult", response.text)
@@ -1852,6 +1868,7 @@ class MainActivity : Activity() {
         diagnosticGeneration++
         mainHandler.removeCallbacksAndMessages(null)
         backgroundExecutor.shutdownNow()
+        brainExecutor.shutdownNow()
         modelExecutor.shutdownNow()
         if (::localLanguageModel.isInitialized) localLanguageModel.unload()
         speechInput.destroy()
