@@ -315,7 +315,7 @@ Deno.serve(async (req: Request) => {
       mode === "subscribe" &&
       token &&
       challenge &&
-      token === verifyToken()
+      token === (optional("WHATSAPP_VERIFY_TOKEN") || DEFAULT_VERIFY_TOKEN)
     ) {
       return new Response(challenge, { status: 200 });
     }
