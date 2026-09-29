@@ -89,9 +89,11 @@ class JarvisNativeLanguageModel(
                 } else {
                     prompt
                 }
+                val promptLimit = if (profileId == "qwen25-0.5b-q2k") 1_200 else 2_200
+                val tokenLimit = if (profileId == "qwen25-0.5b-q2k") 48 else 96
                 val rawOutput = nativeGenerate(
-                    prompt = preparedPrompt.take(2_200),
-                    maxNewTokens = maxNewTokens.coerceIn(16, 96)
+                    prompt = preparedPrompt.take(promptLimit),
+                    maxNewTokens = maxNewTokens.coerceIn(8, tokenLimit)
                 ).orEmpty()
                 if (rawOutput == "__JARVIS_TIMEOUT__") {
                     return@synchronized JarvisLanguageModel.Generation(
