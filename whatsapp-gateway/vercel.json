@@ -1,0 +1,10 @@
+{
+  "functions": {
+    "api/webhook.js": {
+      "maxDuration": 30
+    },
+    "api/health.js": {
+      "maxDuration": 10
+    }
+  }
+}
