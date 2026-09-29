@@ -334,7 +334,7 @@ $('skipRegistration').onclick=()=>{localStorage.setItem('jarvisOnboarded','1');l
     if(modelStatus) modelStatus.textContent=result;
   }
 
-  if(instant) instant.onclick=()=>startModelDownload('qwen25-0.5b-q2k');
+  if(instant) instant.onclick=()=>startModelDownload('qwen25-0.5b-q4_0');
   if(lite) lite.onclick=()=>startModelDownload('qwen3-0.6b-q4km');
   if(standard) standard.onclick=()=>startModelDownload('qwen3-1.7b-q4km');
 
