@@ -292,18 +292,19 @@ Deno.serve(async (req: Request) => {
 
     const missing = required.filter((name) => !optional(name));
     const brainConfigured = true;
+    const senderPolicyConfigured = Boolean(
+      optional("WHATSAPP_ALLOWED_NUMBERS") ||
+        optional("WHATSAPP_ALLOW_ALL").toLowerCase() === "true",
+    );
 
     return json({
       ok: missing.length === 0 && brainConfigured && senderPolicyConfigured,
       service: "jarvis-whatsapp-webhook",
       missing,
       brainConfigured,
-      senderPolicyConfigured: Boolean(
-        optional("WHATSAPP_ALLOWED_NUMBERS") ||
-          optional("WHATSAPP_ALLOW_ALL").toLowerCase() === "true",
-      ),
+      senderPolicyConfigured,
       graphVersion: graphVersion(),
-    }, missing.length === 0 && brainConfigured ? 200 : 503);
+    }, missing.length === 0 && brainConfigured && senderPolicyConfigured ? 200 : 503);
   }
 
   if (req.method === "GET") {
