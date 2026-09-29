@@ -16,7 +16,7 @@ interface JarvisLanguageModel {
 
     fun isReady(): Boolean
     fun modelLabel(): String
-    fun generate(prompt: String, maxNewTokens: Int = 320): Generation
+    fun generate(prompt: String, maxNewTokens: Int = 96): Generation
 }
 
 /**
