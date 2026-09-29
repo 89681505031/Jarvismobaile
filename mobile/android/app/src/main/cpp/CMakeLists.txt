@@ -15,6 +15,16 @@ option(JARVIS_BRAIN_NATIVE "Build the full on-device neural runtime" ON)
 if(JARVIS_BRAIN_NATIVE AND ANDROID_ABI STREQUAL "arm64-v8a")
     include(FetchContent)
 
+    # The installable beta APK uses Android's debug build type so it can keep
+    # the stable debug signing key and update in-place. Native LLM inference
+    # must still be optimized; an unoptimized ggml/llama build is far too slow
+    # on a phone and can miss the first-token deadline by a wide margin.
+    set(JARVIS_FAST_DEBUG_NATIVE ON CACHE BOOL "" FORCE)
+    if(JARVIS_FAST_DEBUG_NATIVE)
+        set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} -O3 -DNDEBUG")
+        set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -O3 -DNDEBUG")
+    endif()
+
     set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
     set(LLAMA_BUILD_IS_DEV OFF CACHE BOOL "" FORCE)
     set(LLAMA_BUILD_COMMON OFF CACHE BOOL "" FORCE)
