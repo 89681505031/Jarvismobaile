@@ -1,5 +1,7 @@
 package com.jarvis.phone
 
+import java.util.concurrent.atomic.AtomicBoolean
+
 /**
  * JNI adapter for the future native GGUF inference backend.
  *
@@ -13,6 +15,7 @@ class JarvisNativeLanguageModel(
 ) : JarvisLanguageModel {
 
     private val lock = Any()
+    private val preparing = AtomicBoolean(false)
     @Volatile private var loadedPath: String? = null
 
     override fun isReady(): Boolean =
@@ -26,20 +29,25 @@ class JarvisNativeLanguageModel(
     fun prepare(): Boolean {
         if (!nativeLibraryLoaded) return false
         val file = modelStore.modelFile() ?: return false
-        return synchronized(lock) {
-            if (loadedPath == file.absolutePath) return@synchronized true
-            try {
-                if (nativeLoadModel(file.absolutePath)) {
+        if (loadedPath == file.absolutePath) return true
+        if (!preparing.compareAndSet(false, true)) return false
+        return try {
+            synchronized(lock) {
+                if (loadedPath == file.absolutePath) {
+                    true
+                } else if (nativeLoadModel(file.absolutePath)) {
                     loadedPath = file.absolutePath
                     true
                 } else {
                     loadedPath = null
                     false
                 }
-            } catch (_: Throwable) {
-                loadedPath = null
-                false
             }
+        } catch (_: Throwable) {
+            loadedPath = null
+            false
+        } finally {
+            preparing.set(false)
         }
     }
 
@@ -60,31 +68,38 @@ class JarvisNativeLanguageModel(
                 text = "Локальная GGUF-модель не выбрана."
             )
 
+        if (preparing.get()) {
+            return JarvisLanguageModel.Generation(
+                success = false,
+                text = "Локальная модель ещё загружается в память. Повторите запрос через несколько секунд."
+            )
+        }
+        if (loadedPath != file.absolutePath) {
+            return JarvisLanguageModel.Generation(
+                success = false,
+                text = "Локальная модель ещё не готова в RAM. Откройте настройки и нажмите «Проверить мозг»."
+            )
+        }
+
         return synchronized(lock) {
             try {
-                if (loadedPath != file.absolutePath) {
-                    if (!nativeLoadModel(file.absolutePath)) {
-                        loadedPath = null
-                        return@synchronized JarvisLanguageModel.Generation(
-                            success = false,
-                            text = "Не удалось загрузить локальную GGUF-модель."
-                        )
-                    }
-                    loadedPath = file.absolutePath
-                }
-
                 val profileId = modelStore.info().profileId
                 val preparedPrompt = if (profileId.startsWith("qwen3-")) {
                     prompt.trimEnd() + "\n/no_think"
                 } else {
                     prompt
                 }
-                val output = cleanOutput(
-                    nativeGenerate(
-                        prompt = preparedPrompt.take(18_000),
-                        maxNewTokens = maxNewTokens.coerceIn(32, 1024)
-                    ).orEmpty()
-                )
+                val rawOutput = nativeGenerate(
+                    prompt = preparedPrompt.take(2_200),
+                    maxNewTokens = maxNewTokens.coerceIn(16, 96)
+                ).orEmpty()
+                if (rawOutput == "__JARVIS_TIMEOUT__") {
+                    return@synchronized JarvisLanguageModel.Generation(
+                        success = false,
+                        text = "Локальная модель не успела ответить за 5 секунд. Для быстрого режима используйте JARVIS Lite."
+                    )
+                }
+                val output = cleanOutput(rawOutput)
 
                 if (output.isBlank()) {
                     JarvisLanguageModel.Generation(
