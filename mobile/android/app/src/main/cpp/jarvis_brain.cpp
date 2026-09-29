@@ -172,7 +172,7 @@ jstring generate_locked(
     const uint32_t available = trained_ctx -
         static_cast<uint32_t>(prompt_tokens.size()) - 8U;
     const uint32_t n_predict = std::min<uint32_t>(
-        static_cast<uint32_t>(std::clamp(requested_new_tokens, 24, 128)),
+        static_cast<uint32_t>(std::clamp(requested_new_tokens, 16, 96)),
         available
     );
     const uint32_t requested_ctx =
@@ -214,7 +214,7 @@ jstring generate_locked(
     bool failed = false;
     llama_token next_token = LLAMA_TOKEN_NULL;
     const auto generation_started = std::chrono::steady_clock::now();
-    constexpr auto max_generation_time = std::chrono::seconds(12);
+    constexpr auto max_generation_time = std::chrono::seconds(8);
     for (uint32_t i = 0; i < n_predict; ++i) {
         if (i > 0 &&
             std::chrono::steady_clock::now() - generation_started > max_generation_time) {
