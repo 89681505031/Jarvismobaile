@@ -23,6 +23,26 @@ class JarvisNativeLanguageModel(
     override fun modelLabel(): String =
         modelStore.modelFile()?.name ?: "не установлена"
 
+    fun prepare(): Boolean {
+        if (!nativeLibraryLoaded) return false
+        val file = modelStore.modelFile() ?: return false
+        return synchronized(lock) {
+            if (loadedPath == file.absolutePath) return@synchronized true
+            try {
+                if (nativeLoadModel(file.absolutePath)) {
+                    loadedPath = file.absolutePath
+                    true
+                } else {
+                    loadedPath = null
+                    false
+                }
+            } catch (_: Throwable) {
+                loadedPath = null
+                false
+            }
+        }
+    }
+
     override fun generate(
         prompt: String,
         maxNewTokens: Int
