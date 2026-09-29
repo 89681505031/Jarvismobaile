@@ -30,7 +30,7 @@ class JarvisBrainEngine(
     }
 
     fun ask(text: String, persona: String = "J.A.R.V.I.S."): Result {
-        val clean = text.trim().take(2_000)
+        val clean = text.trim().take(1_000)
         if (clean.isBlank()) {
             return Result(false, "Я не расслышал вопрос.", Source.LOCAL_FALLBACK)
         }
@@ -84,23 +84,23 @@ class JarvisBrainEngine(
             "Кибер", "Cyber" -> "Кибер: технический помощник."
             else -> "J.A.R.V.I.S.: универсальный персональный помощник."
         }
-        val facts = memory.approvedBrainFacts(query).take(1_200)
+        val facts = memory.approvedBrainFacts(query).take(700)
         val selectedTurns = LinkedHashMap<String, Pair<String, String>>()
-        memory.relevantDialogues(query, 2).forEach { turn ->
+        memory.relevantDialogues(query, 1).forEach { turn ->
             selectedTurns[turn.first + "\u0000" + turn.second] = turn
         }
         memory.recentDialogues().takeLast(1).forEach { turn ->
             selectedTurns[turn.first + "\u0000" + turn.second] = turn
         }
-        val turns = selectedTurns.values.toList().takeLast(3)
+        val turns = selectedTurns.values.toList().takeLast(2)
             .joinToString("\n") { (user, assistant) ->
-                "Пользователь: ${user.take(220)}\nJARVIS: ${assistant.take(320)}"
+                "Пользователь: ${user.take(160)}\nJARVIS: ${assistant.take(220)}"
             }
 
         return buildString {
             append("Ты работаешь внутри JARVIS BRAIN полностью локально на телефоне.\n")
             append(role).append("\n")
-            append("Отвечай по-русски естественно и по существу. Не выдумывай действия телефона, ")
+            append("Отвечай по-русски быстро и кратко: обычно 1–3 предложения. Не выдумывай действия телефона, ")
             append("если их не выполнил отдельный модуль команд.\n")
             if (facts.isNotBlank()) {
                 append("\nЛокальная долговременная память:\n").append(facts).append("\n")
@@ -110,7 +110,7 @@ class JarvisBrainEngine(
             }
             append("\nТекущий вопрос пользователя:\n").append(query)
             append("\n\nОтвет JARVIS:")
-        }.take(3_200)
+        }.take(2_200)
     }
 
     private fun identityAnswer(normalized: String, persona: String): String? {
