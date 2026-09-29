@@ -6,6 +6,7 @@ declare const EdgeRuntime: {
 
 const DEFAULT_GRAPH_VERSION = "v26.0";
 const DEFAULT_JARVIS_VOICE_ID = "4c3eaacc1a0545cdb0295bfddf3e3785";
+const DEFAULT_VERIFY_TOKEN = "jarvis-whatsapp-verify-2026";
 const REQUEST_TIMEOUT_MS = 15000;
 
 function env(name: string): string {
@@ -283,7 +284,6 @@ Deno.serve(async (req: Request) => {
 
   if (req.method === "GET" && url.searchParams.get("health") === "1") {
     const required = [
-      "WHATSAPP_VERIFY_TOKEN",
       "WHATSAPP_ACCESS_TOKEN",
       "WHATSAPP_PHONE_NUMBER_ID",
       "WHATSAPP_APP_SECRET",
