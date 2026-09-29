@@ -1204,7 +1204,7 @@ class MainActivity : Activity() {
             brainGeneration.incrementAndGet()
             val timeoutText =
                 "Сэр, локальная модель не успела ответить за 5 секунд. " +
-                "Для быстрого режима выберите JARVIS Lite и нажмите «Проверить мозг»."
+                "Для быстрого режима выберите JARVIS Instant и нажмите «Проверить мозг»."
             voiceEvent("onJarvisBrainState", "ready", timeoutText)
             voiceEvent("onJarvisBrainResult", timeoutText)
             speak(timeoutText, resumeAfterSpeech = true)
