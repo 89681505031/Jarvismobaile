@@ -239,6 +239,13 @@ class JarvisModelStore(private val context: Context) {
 
         private val PROFILES = listOf(
             Profile(
+                id = "qwen25-0.5b-q2k",
+                label = "JARVIS Instant · Qwen2.5 0.5B Q2_K",
+                approximateBytes = 415_000_000L,
+                url = "https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct-GGUF/resolve/6dd44a1fb35d11b5d1b28902876ce3cc9e882d0e/qwen2.5-0.5b-instruct-q2_k.gguf?download=true",
+                sha256 = "9ee36184e616dfc76df4f5dd66f908dbde6979524ae36e6cefb67f532f798cb8"
+            ),
+            Profile(
                 id = "qwen3-0.6b-q4km",
                 label = "JARVIS Lite · Qwen3 0.6B Q4_K_M",
                 approximateBytes = 397_000_000L,
