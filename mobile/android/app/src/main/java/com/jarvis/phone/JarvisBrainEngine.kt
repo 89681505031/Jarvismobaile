@@ -62,12 +62,14 @@ class JarvisBrainEngine(
             if (generation.success && generation.text.isNotBlank()) {
                 return Result(true, generation.text.trim(), Source.NEURAL_MODEL)
             }
+            if (generation.text.isNotBlank()) {
+                return Result(false, generation.text.trim(), Source.LOCAL_FALLBACK)
+            }
         }
 
         return Result(
             success = false,
-            text = "Сэр, этот вопрос уже требует локальной языковой модели. " +
-                "JARVIS BRAIN работает без GigaChat и без внешнего ИИ, но нейросетевой генератор ещё не установлен.",
+            text = "Сэр, этот вопрос требует локальной языковой модели. Установите JARVIS Lite в настройках.",
             source = Source.LOCAL_FALLBACK
         )
     }
