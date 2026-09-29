@@ -130,6 +130,11 @@ class MainActivity : Activity() {
         modelStore = JarvisModelStore(this)
         localLanguageModel = JarvisNativeLanguageModel(modelStore)
         brain = JarvisBrainEngine(memory, localLanguageModel)
+        if (modelStore.modelFile() != null) {
+            modelExecutor.execute {
+                localLanguageModel.prepare()
+            }
+        }
         tts = TextToSpeech(this) { status ->
             ttsReady = status == TextToSpeech.SUCCESS
             if (ttsReady) {
@@ -593,10 +598,15 @@ class MainActivity : Activity() {
                     installed.fold(
                         onSuccess = { info ->
                             localLanguageModel.unload()
+                            val preloaded = localLanguageModel.prepare()
                             brainGeneration.incrementAndGet()
                             val text = "GGUF-модель сохранена локально: " +
                                 modelStore.humanSize(info.bytes) +
-                                ". JARVIS BRAIN готов загрузить её при следующем сложном вопросе."
+                                if (preloaded) {
+                                    ". Модель загружена в RAM и готова к быстрому ответу."
+                                } else {
+                                    ". JARVIS BRAIN загрузит её при первом вопросе."
+                                }
                             voiceEvent("onJarvisBrainModelStatus", "stored", text)
                             showVoiceStatus(text)
                         },
@@ -1685,10 +1695,15 @@ class MainActivity : Activity() {
                     if (isFinishing || isDestroyed) return@runOnUiThread
                     result.fold(
                         onSuccess = { info ->
+                            val preloaded = localLanguageModel.prepare()
                             brainGeneration.incrementAndGet()
                             val text = (info.label.ifBlank { "GGUF-модель" }) +
                                 " установлена локально · " + modelStore.humanSize(info.bytes) +
-                                ". JARVIS BRAIN готов к офлайн-диалогу."
+                                if (preloaded) {
+                                    ". Модель уже загружена в RAM — JARVIS BRAIN готов к быстрому ответу."
+                                } else {
+                                    ". JARVIS BRAIN загрузит её при первом вопросе."
+                                }
                             voiceEvent("onJarvisBrainModelDownload", "stored", text)
                             voiceEvent("onJarvisBrainModelStatus", "stored", text)
                             showVoiceStatus(text)
