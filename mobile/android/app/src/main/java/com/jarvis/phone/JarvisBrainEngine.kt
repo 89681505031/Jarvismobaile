@@ -30,7 +30,7 @@ class JarvisBrainEngine(
     }
 
     fun ask(text: String, persona: String = "J.A.R.V.I.S."): Result {
-        val clean = text.trim().take(12_000)
+        val clean = text.trim().take(2_000)
         if (clean.isBlank()) {
             return Result(false, "Я не расслышал вопрос.", Source.LOCAL_FALLBACK)
         }
@@ -84,17 +84,17 @@ class JarvisBrainEngine(
             "Кибер", "Cyber" -> "Кибер: технический помощник."
             else -> "J.A.R.V.I.S.: универсальный персональный помощник."
         }
-        val facts = memory.approvedBrainFacts(query).take(8000)
+        val facts = memory.approvedBrainFacts(query).take(2_400)
         val selectedTurns = LinkedHashMap<String, Pair<String, String>>()
-        memory.relevantDialogues(query, 6).forEach { turn ->
+        memory.relevantDialogues(query, 3).forEach { turn ->
             selectedTurns[turn.first + "\u0000" + turn.second] = turn
         }
-        memory.recentDialogues().takeLast(4).forEach { turn ->
+        memory.recentDialogues().takeLast(2).forEach { turn ->
             selectedTurns[turn.first + "\u0000" + turn.second] = turn
         }
-        val turns = selectedTurns.values.toList().takeLast(8)
+        val turns = selectedTurns.values.toList().takeLast(4)
             .joinToString("\n") { (user, assistant) ->
-                "Пользователь: ${user.take(900)}\nJARVIS: ${assistant.take(1200)}"
+                "Пользователь: ${user.take(320)}\nJARVIS: ${assistant.take(480)}"
             }
 
         return buildString {
@@ -110,7 +110,7 @@ class JarvisBrainEngine(
             }
             append("\nТекущий вопрос пользователя:\n").append(query)
             append("\n\nОтвет JARVIS:")
-        }.take(18_000)
+        }.take(5_500)
     }
 
     private fun identityAnswer(normalized: String, persona: String): String? {
