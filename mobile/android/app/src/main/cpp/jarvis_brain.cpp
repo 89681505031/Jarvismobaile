@@ -3,6 +3,7 @@
 #include <llama.h>
 
 #include <algorithm>
+#include <atomic>
 #include <chrono>
 #include <cstdint>
 #include <mutex>
@@ -104,6 +105,19 @@ std::string token_piece(const llama_vocab * vocab, llama_token token) {
     return large;
 }
 
+struct DecodeAbortState {
+    std::chrono::steady_clock::time_point deadline;
+    std::atomic_bool aborted { false };
+};
+
+bool abort_on_deadline(void * data) {
+    auto * state = static_cast<DecodeAbortState *>(data);
+    if (state == nullptr) return false;
+    if (std::chrono::steady_clock::now() < state->deadline) return false;
+    state->aborted.store(true, std::memory_order_relaxed);
+    return true;
+}
+
 int32_t thread_count() {
     const unsigned int hardware = std::thread::hardware_concurrency();
     if (hardware <= 2) return 2;
@@ -181,7 +195,13 @@ jstring generate_locked(
         trained_ctx, std::max<uint32_t>(1024U, requested_ctx)
     );
 
+    DecodeAbortState abort_state {
+        std::chrono::steady_clock::now() + std::chrono::seconds(5)
+    };
+
     llama_context_params context_params = llama_context_default_params();
+    context_params.abort_callback = abort_on_deadline;
+    context_params.abort_callback_data = &abort_state;
     context_params.n_ctx = n_ctx;
     context_params.n_batch = std::min<uint32_t>(
         n_ctx, std::max<uint32_t>(512U, static_cast<uint32_t>(prompt_tokens.size()))
@@ -214,7 +234,7 @@ jstring generate_locked(
     bool failed = false;
     llama_token next_token = LLAMA_TOKEN_NULL;
     const auto generation_started = std::chrono::steady_clock::now();
-    constexpr auto max_generation_time = std::chrono::seconds(8);
+    constexpr auto max_generation_time = std::chrono::seconds(5);
     for (uint32_t i = 0; i < n_predict; ++i) {
         if (i > 0 &&
             std::chrono::steady_clock::now() - generation_started > max_generation_time) {
@@ -225,6 +245,10 @@ jstring generate_locked(
             break;
         }
         if (llama_decode(context, batch) != 0) {
+            if (abort_state.aborted.load(std::memory_order_relaxed)) {
+                __android_log_print(ANDROID_LOG_WARN, TAG, "llama_decode aborted by deadline");
+                break;
+            }
             log_error("llama_decode failed");
             failed = true;
             break;
@@ -248,6 +272,9 @@ jstring generate_locked(
     llama_sampler_free(sampler);
     llama_free(context);
 
+    if (abort_state.aborted.load(std::memory_order_relaxed) && output.empty()) {
+        return env->NewStringUTF("__JARVIS_TIMEOUT__");
+    }
     if (failed || output.empty()) {
         return nullptr;
     }
