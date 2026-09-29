@@ -3,6 +3,7 @@
 #include <llama.h>
 
 #include <algorithm>
+#include <chrono>
 #include <cstdint>
 #include <mutex>
 #include <string>
@@ -15,6 +16,7 @@ constexpr const char * TAG = "JarvisBrain";
 std::mutex g_mutex;
 std::once_flag g_backend_once;
 llama_model * g_model = nullptr;
+std::string g_model_path;
 
 void log_error(const char * message) {
     __android_log_print(ANDROID_LOG_ERROR, TAG, "%s", message);
@@ -31,6 +33,7 @@ void free_model_locked() {
     if (g_model != nullptr) {
         llama_model_free(g_model);
         g_model = nullptr;
+        g_model_path.clear();
     }
 }
 
@@ -169,7 +172,7 @@ jstring generate_locked(
     const uint32_t available = trained_ctx -
         static_cast<uint32_t>(prompt_tokens.size()) - 8U;
     const uint32_t n_predict = std::min<uint32_t>(
-        static_cast<uint32_t>(std::clamp(requested_new_tokens, 32, 1024)),
+        static_cast<uint32_t>(std::clamp(requested_new_tokens, 24, 128)),
         available
     );
     const uint32_t requested_ctx =
@@ -210,7 +213,17 @@ jstring generate_locked(
 
     bool failed = false;
     llama_token next_token = LLAMA_TOKEN_NULL;
+    const auto generation_started = std::chrono::steady_clock::now();
+    constexpr auto max_generation_time = std::chrono::seconds(12);
     for (uint32_t i = 0; i < n_predict; ++i) {
+        if (i > 0 &&
+            std::chrono::steady_clock::now() - generation_started > max_generation_time) {
+            __android_log_print(
+                ANDROID_LOG_WARN, TAG,
+                "generation time budget reached after %u tokens", i
+            );
+            break;
+        }
         if (llama_decode(context, batch) != 0) {
             log_error("llama_decode failed");
             failed = true;
@@ -263,6 +276,10 @@ Java_com_jarvis_phone_JarvisNativeLanguageModel_nativeLoadModel(
     const std::string path(raw_path);
     env->ReleaseStringUTFChars(j_path, raw_path);
 
+    if (g_model != nullptr && g_model_path == path) {
+        return JNI_TRUE;
+    }
+
     free_model_locked();
 
     llama_model_params params = llama_model_default_params();
@@ -274,6 +291,7 @@ Java_com_jarvis_phone_JarvisNativeLanguageModel_nativeLoadModel(
         return JNI_FALSE;
     }
 
+    g_model_path = path;
     __android_log_print(ANDROID_LOG_INFO, TAG, "local GGUF model loaded");
     return JNI_TRUE;
 }
