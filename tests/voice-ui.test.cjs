@@ -214,7 +214,7 @@ test('built-in local model buttons select the expected verified profiles',()=>{
   elements.get('downloadBrainInstant').onclick();
   elements.get('downloadBrainLite').onclick();
   elements.get('downloadBrainStandard').onclick();
-  assert.deepEqual(calls,['qwen25-0.5b-q2k','qwen3-0.6b-q4km','qwen3-1.7b-q4km']);
+  assert.deepEqual(calls,['qwen25-0.5b-q4_0','qwen3-0.6b-q4km','qwen3-1.7b-q4km']);
   context.window.onJarvisBrainModelDownload('progress','Загрузка JARVIS Lite: 42%');
   assert.match(elements.get('brainModelStatus').textContent,/42%/);
   context.window.onJarvisBrainModelDownload('stored','Модель установлена локально');
