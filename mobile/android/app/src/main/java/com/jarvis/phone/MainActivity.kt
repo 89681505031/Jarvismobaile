@@ -594,11 +594,15 @@ class MainActivity : Activity() {
             showVoiceStatus("Копирую GGUF-модель в локальную память JARVIS…")
             backgroundExecutor.execute {
                 val installed = modelStore.installFrom(uri)
+                val preloaded = if (installed.isSuccess) {
+                    localLanguageModel.unload()
+                    localLanguageModel.prepare()
+                } else {
+                    false
+                }
                 runOnUiThread {
                     installed.fold(
                         onSuccess = { info ->
-                            localLanguageModel.unload()
-                            val preloaded = localLanguageModel.prepare()
                             brainGeneration.incrementAndGet()
                             val text = "GGUF-модель сохранена локально: " +
                                 modelStore.humanSize(info.bytes) +
@@ -1690,12 +1694,16 @@ class MainActivity : Activity() {
                     }
                 }
 
+                val preloaded = if (result.isSuccess) {
+                    localLanguageModel.prepare()
+                } else {
+                    false
+                }
                 modelDownloadRunning.set(false)
                 runOnUiThread {
                     if (isFinishing || isDestroyed) return@runOnUiThread
                     result.fold(
                         onSuccess = { info ->
-                            val preloaded = localLanguageModel.prepare()
                             brainGeneration.incrementAndGet()
                             val text = (info.label.ifBlank { "GGUF-модель" }) +
                                 " установлена локально · " + modelStore.humanSize(info.bytes) +
