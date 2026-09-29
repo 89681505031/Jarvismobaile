@@ -186,7 +186,7 @@ jstring generate_locked(
     const uint32_t available = trained_ctx -
         static_cast<uint32_t>(prompt_tokens.size()) - 8U;
     const uint32_t n_predict = std::min<uint32_t>(
-        static_cast<uint32_t>(std::clamp(requested_new_tokens, 16, 96)),
+        static_cast<uint32_t>(std::clamp(requested_new_tokens, 8, 96)),
         available
     );
     const uint32_t requested_ctx =
