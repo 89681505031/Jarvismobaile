@@ -98,7 +98,7 @@ class JarvisNativeLanguageModel(
                 if (rawOutput == "__JARVIS_TIMEOUT__") {
                     return@synchronized JarvisLanguageModel.Generation(
                         success = false,
-                        text = "Локальная модель не успела ответить за 5 секунд. Для быстрого режима используйте JARVIS Lite."
+                        text = "Локальная модель не успела ответить за 5 секунд. Для быстрого режима используйте JARVIS Instant."
                     )
                 }
                 val output = cleanOutput(rawOutput)
