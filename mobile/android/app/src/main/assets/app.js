@@ -251,7 +251,7 @@ $('skipRegistration').onclick=()=>{localStorage.setItem('jarvisOnboarded','1');l
 (function initJarvisBrainControls() {
   const badge=$('brainBadge'),info=$('brainStatus'),clear=$('clearBrainHistory');
   const choose=$('chooseBrainModel'),remove=$('removeBrainModel'),modelStatus=$('brainModelStatus');
-  const lite=$('downloadBrainLite'),standard=$('downloadBrainStandard'),test=$('testBrainModel');
+  const instant=$('downloadBrainInstant'),lite=$('downloadBrainLite'),standard=$('downloadBrainStandard'),test=$('testBrainModel');
   if(!badge||!info)return;
 
   function readStatus(){
@@ -280,6 +280,7 @@ $('skipRegistration').onclick=()=>{localStorage.setItem('jarvisOnboarded','1');l
         modelStatus.textContent='Файл модели ещё не выбран.';
       }
     }
+    if(instant) instant.disabled=busy;
     if(lite) lite.disabled=busy;
     if(standard) standard.disabled=busy;
     if(choose) choose.disabled=busy;
@@ -309,6 +310,7 @@ $('skipRegistration').onclick=()=>{localStorage.setItem('jarvisOnboarded','1');l
   window.onJarvisBrainSelfTest=(phase,text)=>{
     if(modelStatus) modelStatus.textContent=String(text||'Самопроверка JARVIS BRAIN…');
     const busy=phase==='running';
+    if(instant) instant.disabled=busy;
     if(lite) lite.disabled=busy;
     if(standard) standard.disabled=busy;
     if(choose) choose.disabled=busy;
@@ -332,6 +334,7 @@ $('skipRegistration').onclick=()=>{localStorage.setItem('jarvisOnboarded','1');l
     if(modelStatus) modelStatus.textContent=result;
   }
 
+  if(instant) instant.onclick=()=>startModelDownload('qwen25-0.5b-q2k');
   if(lite) lite.onclick=()=>startModelDownload('qwen3-0.6b-q4km');
   if(standard) standard.onclick=()=>startModelDownload('qwen3-1.7b-q4km');
 
