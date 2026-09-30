@@ -53,7 +53,7 @@ class JarvisBrainEngine(
             return Result(true, it, Source.CONVERSATION)
         }
 
-        if (languageModel.isReady()) {
+        if (allowNeural && languageModel.isReady()) {
             val generation = languageModel.generate(buildNeuralPrompt(clean, persona))
             if (generation.success && generation.text.isNotBlank()) {
                 return Result(true, generation.text.trim(), Source.NEURAL_MODEL)
@@ -65,7 +65,11 @@ class JarvisBrainEngine(
 
         return Result(
             success = false,
-            text = "Сэр, этот вопрос требует локальной языковой модели. Установите JARVIS Instant в настройках.",
+            text = if (allowNeural) {
+                "Сэр, этот вопрос требует языковой модели."
+            } else {
+                "Локальный резерв не может надёжно ответить на этот вопрос без GigaChat."
+            },
             source = Source.LOCAL_FALLBACK
         )
     }
