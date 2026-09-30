@@ -41,11 +41,14 @@ class MainActivity : Activity() {
     private lateinit var webView: WebView
     private lateinit var router: PhoneCommandRouter
     private lateinit var brain: JarvisBrainEngine
+    private lateinit var gigaChat: GigaChatClient
     private lateinit var modelStore: JarvisModelStore
     private lateinit var localLanguageModel: JarvisNativeLanguageModel
     private val brainGeneration = AtomicInteger(0)
     private val modelDownloadRunning = AtomicBoolean(false)
     private val brainSelfTestRunning = AtomicBoolean(false)
+    private val gigaTestRunning = AtomicBoolean(false)
+    private val gigaSessionTurns = mutableListOf<Pair<String, String>>()
     private lateinit var speechInput: SpeechInputController
     private lateinit var offlineWake: OfflineWakeEngine
     private var pendingMicStart = false
@@ -131,6 +134,7 @@ class MainActivity : Activity() {
         modelStore = JarvisModelStore(this)
         localLanguageModel = JarvisNativeLanguageModel(modelStore)
         brain = JarvisBrainEngine(memory, localLanguageModel)
+        gigaChat = GigaChatClient(this)
         if (modelStore.modelFile() != null) {
             modelExecutor.execute {
                 localLanguageModel.prepare()
@@ -1190,46 +1194,86 @@ class MainActivity : Activity() {
     }
 
     /**
-     * Free-form questions are answered by first-party JARVIS BRAIN on-device.
+     * Conversational routing:
+     * 1) deterministic local skills/memory for instant reliable replies;
+     * 2) GigaChat for open-ended language understanding;
+     * 3) never fall back to the weak local neural model for open-ended chat.
      */
     private fun sendToJarvisBrain(text: String, memoryText: String = text) {
         val ticket = brainGeneration.incrementAndGet()
         val persona = selectedPersona
-        runOnUiThread {
-            voiceEvent("onJarvisBrainState", "thinking", "JARVIS BRAIN думает локально…")
-        }
-
-        val watchdog = Runnable {
-            if (ticket != brainGeneration.get() || isFinishing || isDestroyed) return@Runnable
-            brainGeneration.incrementAndGet()
-            val timeoutText =
-                "Сэр, локальная модель не успела ответить за 5 секунд. " +
-                "Для быстрого режима выберите JARVIS Instant и нажмите «Проверить мозг»."
-            voiceEvent("onJarvisBrainState", "ready", timeoutText)
-            voiceEvent("onJarvisBrainResult", timeoutText)
-            speak(timeoutText, resumeAfterSpeech = true)
-        }
-        mainHandler.postDelayed(watchdog, 5_500L)
 
         brainExecutor.execute {
-            val response = brain.ask(memoryText, persona)
-            mainHandler.removeCallbacks(watchdog)
+            val quickLocal = brain.ask(memoryText, persona, allowNeural = false)
+            if (quickLocal.success) {
+                if (ticket != brainGeneration.get()) return@execute
+                memory.rememberTurn(memoryText, quickLocal.text)
+                runOnUiThread {
+                    if (ticket != brainGeneration.get() || isFinishing || isDestroyed) return@runOnUiThread
+                    voiceEvent("onJarvisBrainState", "local_ready", "Быстрый локальный ответ готов")
+                    voiceEvent("onJarvisBrainResult", quickLocal.text)
+                    speak(quickLocal.text, resumeAfterSpeech = true)
+                }
+                return@execute
+            }
+
+            if (!gigaChat.configured()) {
+                val message =
+                    "Сэр, для умных разговорных ответов подключите GigaChat в настройках JARVIS. " +
+                    "Локальные команды и память продолжат работать без него."
+                if (ticket != brainGeneration.get()) return@execute
+                runOnUiThread {
+                    if (ticket != brainGeneration.get() || isFinishing || isDestroyed) return@runOnUiThread
+                    voiceEvent("onJarvisBrainState", "cloud_setup_required", message)
+                    voiceEvent("onJarvisBrainResult", message)
+                    speak(message, resumeAfterSpeech = true)
+                }
+                return@execute
+            }
+
+            runOnUiThread {
+                if (ticket == brainGeneration.get()) {
+                    voiceEvent("onJarvisBrainState", "cloud_thinking", "GigaChat формирует ответ…")
+                }
+            }
+
+            val safeFacts = memory.approvedBrainFacts(memoryText).take(4_000)
+            val sessionTurns = synchronized(gigaSessionTurns) {
+                gigaSessionTurns.takeLast(4)
+            }
+            val cloud = try {
+                gigaChat.askConversation(
+                    userText = text.take(4_000),
+                    persona = persona,
+                    memoryContext = safeFacts,
+                    recentTurns = sessionTurns
+                )
+            } catch (_: Exception) {
+                GigaChatClient.Reply("Не удалось связаться с GigaChat.", false)
+            }
+
             if (ticket != brainGeneration.get()) return@execute
 
-            if (response.success) {
-                memory.rememberTurn(memoryText, response.text)
+            val answer = if (cloud.success) {
+                synchronized(gigaSessionTurns) {
+                    gigaSessionTurns += memoryText.take(1_000) to cloud.text.take(2_000)
+                    while (gigaSessionTurns.size > 6) gigaSessionTurns.removeAt(0)
+                }
+                memory.rememberTurn(memoryText, cloud.text)
+                cloud.text
+            } else {
+                cloud.text
             }
 
             runOnUiThread {
                 if (ticket != brainGeneration.get() || isFinishing || isDestroyed) return@runOnUiThread
-                val phase = if (response.success || brain.neuralModelReady()) "ready" else "local_model_required"
                 voiceEvent(
                     "onJarvisBrainState",
-                    phase,
-                    if (response.success) "Локальный ответ JARVIS BRAIN готов" else response.text
+                    if (cloud.success) "cloud_ready" else "cloud_error",
+                    if (cloud.success) "Ответ GigaChat готов" else cloud.text
                 )
-                voiceEvent("onJarvisBrainResult", response.text)
-                speak(response.text, resumeAfterSpeech = true)
+                voiceEvent("onJarvisBrainResult", answer)
+                speak(answer, resumeAfterSpeech = true)
             }
         }
     }
@@ -1647,10 +1691,14 @@ class MainActivity : Activity() {
         fun getJarvisBrainStatus(): String {
             val info = modelStore.info()
             return JSONObject().apply {
-                put("engine", "JARVIS BRAIN")
-                put("version", "0.1")
-                put("mode", "local")
-                put("networkRequired", false)
+                put("engine", "GigaChat")
+                put("version", "2")
+                put("mode", "gigachat-primary")
+                put("networkRequired", true)
+                put("gigaConfigured", gigaChat.configured())
+                put("gigaModel", gigaChat.modelName())
+                put("gigaScope", gigaChat.scopeName())
+                put("localFallback", true)
                 put("memoryLocal", true)
                 put("memoryEpisodes", memory.episodeCount())
                 put("modelFilePresent", info.present)
@@ -1663,6 +1711,59 @@ class MainActivity : Activity() {
                 put("brainSelfTestRunning", brainSelfTestRunning.get())
                 put("neuralModelInstalled", localLanguageModel.isReady())
             }.toString()
+        }
+
+        @JavascriptInterface
+        fun getGigaChatSettings(): String = JSONObject().apply {
+            put("configured", gigaChat.configured())
+            put("model", gigaChat.modelName())
+            put("scope", gigaChat.scopeName())
+        }.toString()
+
+        @JavascriptInterface
+        fun setGigaChatConfig(key: String, model: String, scope: String): String {
+            val editor = prefs.edit()
+            if (key.isNotBlank()) {
+                editor.putString("gigachat_api_key", key.trim())
+                gigaChat.invalidateToken()
+            }
+            editor.putString("gigachat_model", GigaChatBrainPolicy.validModel(model))
+            editor.putString("gigachat_scope", GigaChatBrainPolicy.validScope(scope))
+            editor.apply()
+            synchronized(gigaSessionTurns) { gigaSessionTurns.clear() }
+            return if (gigaChat.configured()) {
+                "GigaChat настроен · ${gigaChat.modelName()} · ${gigaChat.scopeName()}"
+            } else {
+                "Введите Authorization Key GigaChat."
+            }
+        }
+
+        @JavascriptInterface
+        fun clearGigaChatKey(): String {
+            prefs.edit().remove("gigachat_api_key").apply()
+            gigaChat.invalidateToken()
+            synchronized(gigaSessionTurns) { gigaSessionTurns.clear() }
+            return "Ключ GigaChat удалён из приложения."
+        }
+
+        @JavascriptInterface
+        fun testGigaChatConnection(): String {
+            if (!gigaChat.configured()) return "Сначала сохраните Authorization Key GigaChat."
+            if (!gigaTestRunning.compareAndSet(false, true)) return "Проверка GigaChat уже выполняется."
+            backgroundExecutor.execute {
+                val result = gigaChat.testConnection()
+                gigaTestRunning.set(false)
+                runOnUiThread {
+                    if (!isFinishing && !isDestroyed) {
+                        voiceEvent(
+                            "onGigaChatConnectionStatus",
+                            if (result.success) "success" else "error",
+                            result.text
+                        )
+                    }
+                }
+            }
+            return "Проверяю подключение к GigaChat…"
         }
 
         @JavascriptInterface
