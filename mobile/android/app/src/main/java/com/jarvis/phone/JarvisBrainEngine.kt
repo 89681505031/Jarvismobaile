@@ -29,7 +29,7 @@ class JarvisBrainEngine(
         LOCAL_FALLBACK
     }
 
-    fun ask(text: String, persona: String = "J.A.R.V.I.S."): Result {
+    fun ask(text: String, persona: String = "J.A.R.V.I.S.", allowNeural: Boolean = true): Result {
         val clean = text.trim().take(1_000)
         if (clean.isBlank()) {
             return Result(false, "Я не расслышал вопрос.", Source.LOCAL_FALLBACK)
