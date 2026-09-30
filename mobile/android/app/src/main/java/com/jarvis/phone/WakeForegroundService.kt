@@ -393,8 +393,7 @@ class WakeForegroundService : Service() {
             return
         }
 
-        // Ordinary questions are handled by the same first-party local brain
-        // used by MainActivity, so minimized mode does not depend on cloud AI.
+        // Ordinary questions use GigaChat when configured; deterministic local logic remains the fallback.
         askJarvisBrainInBackground(phrase)
     }
 
@@ -479,7 +478,23 @@ class WakeForegroundService : Service() {
         infoExecutor.execute {
             val summary = try {
                 val items = newsFeed.fetchMainHeadlines()
-                JarvisNewsSummary.fallback(items)
+                if (gigaChat.configured()) {
+                    val persona = getSharedPreferences("jarvis_settings", MODE_PRIVATE)
+                        .getString("persona", "J.A.R.V.I.S.").orEmpty()
+                    val cloud = gigaChat.askConversation(
+                        userText = JarvisNewsSummary.prompt(items),
+                        persona = persona,
+                        memoryContext = "",
+                        recentTurns = emptyList()
+                    )
+                    if (cloud.success && JarvisNewsSummary.usableModelSummary(cloud.text)) {
+                        cloud.text
+                    } else {
+                        JarvisNewsSummary.fallback(items)
+                    }
+                } else {
+                    JarvisNewsSummary.fallback(items)
+                }
             } catch (_: Exception) {
                 "Не удалось получить главные новости. Проверьте интернет и повторите."
             }
