@@ -59,6 +59,7 @@ class WakeForegroundService : Service() {
     private lateinit var modelStore: JarvisModelStore
     private lateinit var localLanguageModel: JarvisNativeLanguageModel
     private lateinit var brain: JarvisBrainEngine
+    private lateinit var gigaChat: GigaChatClient
     private lateinit var reminders: JarvisReminders
     private lateinit var home: JarvisHomeAssistant
     private val newsFeed = JarvisNewsFeed()
@@ -118,6 +119,7 @@ class WakeForegroundService : Service() {
         modelStore = JarvisModelStore(this)
         localLanguageModel = JarvisNativeLanguageModel(modelStore)
         brain = JarvisBrainEngine(memory, localLanguageModel)
+        gigaChat = GigaChatClient(this)
         reminders = JarvisReminders(this)
         home = JarvisHomeAssistant(this)
         offline = OfflineWakeEngine(
@@ -423,22 +425,38 @@ class WakeForegroundService : Service() {
             .getString("persona", "J.A.R.V.I.S.").orEmpty()
 
         infoExecutor.execute {
-            val response = try {
-                brain.ask(phrase.take(4000), persona)
+            val quickLocal = try {
+                brain.ask(phrase.take(4000), persona, allowNeural = false)
             } catch (_: Exception) {
                 JarvisBrainEngine.Result(
                     success = false,
-                    text = "Не удалось получить локальный ответ JARVIS BRAIN.",
+                    text = "Локальный резерв временно недоступен.",
                     source = JarvisBrainEngine.Source.LOCAL_FALLBACK
                 )
             }
-            if (response.success) memory.rememberTurn(phrase, response.text)
+
+            val answer = if (quickLocal.success) {
+                memory.rememberTurn(phrase, quickLocal.text)
+                quickLocal.text
+            } else if (gigaChat.configured()) {
+                val cloud = gigaChat.askConversation(
+                    userText = phrase.take(4000),
+                    persona = persona,
+                    memoryContext = memory.approvedBrainFacts(phrase).take(3000),
+                    recentTurns = emptyList()
+                )
+                if (cloud.success) memory.rememberTurn(phrase, cloud.text)
+                cloud.text
+            } else {
+                "Для умного ответа в фоне подключите GigaChat в настройках JARVIS."
+            }
+
             ui.post {
                 if (shuttingDown) return@post
                 backgroundBusy = false
-                notificationText = response.text.take(220)
+                notificationText = answer.take(220)
                 updateNotification()
-                speak(response.text)
+                speak(answer)
             }
         }
     }
