@@ -1,7 +1,7 @@
 function canonicalPersona(name){const n=String(name||'').trim().toLowerCase();if(['cyber','сайбер','кибер'].includes(n))return 'Кибер';if(['astra','астра'].includes(n))return 'Astra';if(['luna','луна'].includes(n))return 'Luna';if(['terra','терра'].includes(n))return 'Terra';if(['jarvis','j.a.r.v.i.s','j.a.r.v.i.s.','джарвис','джервис','жарвис'].includes(n))return 'J.A.R.V.I.S.';return String(name||'J.A.R.V.I.S.').trim()||'J.A.R.V.I.S.'}
 const storedPersona=canonicalPersona(localStorage.getItem('jarvisPersona')||'J.A.R.V.I.S.');localStorage.setItem('jarvisPersona',storedPersona);
 const state={mode:'phone',persona:storedPersona,waitingForCommand:false,diagnosticActive:false,wakeActive:false};
-const $=id=>document.getElementById(id);const message=$('message'),command=$('command'),send=$('send'),modeButton=$('modeButton'),modeNav=$('modeNav'),appsNav=$('appsNav'),commandsNav=$('commandsNav'),appsPanel=$('appsPanel'),commandsPanel=$('commandsPanel'),appsList=$('appsList'),refreshApps=$('refreshApps'),settingsNav=$('settingsNav'),settingsPanel=$('settingsPanel'),personaList=$('personaList'),orbButton=$('orbButton'),fishApiKey=$('fishApiKey'),saveApiKeys=$('saveApiKeys'),checkUpdates=$('checkUpdates'),apiStatus=$('apiStatus');
+const $=id=>document.getElementById(id);const message=$('message'),command=$('command'),send=$('send'),modeButton=$('modeButton'),modeNav=$('modeNav'),appsNav=$('appsNav'),commandsNav=$('commandsNav'),appsPanel=$('appsPanel'),commandsPanel=$('commandsPanel'),appsList=$('appsList'),refreshApps=$('refreshApps'),settingsNav=$('settingsNav'),settingsPanel=$('settingsPanel'),personaList=$('personaList'),orbButton=$('orbButton'),fishApiKey=$('fishApiKey'),saveApiKeys=$('saveApiKeys'),checkUpdates=$('checkUpdates'),apiStatus=$('apiStatus'),gigaApiKey=$('gigaApiKey'),gigaModel=$('gigaModel'),gigaScope=$('gigaScope'),saveGigaChat=$('saveGigaChat'),testGigaChat=$('testGigaChat'),clearGigaChat=$('clearGigaChat'),gigaStatus=$('gigaStatus');
 const personas=[['J.A.R.V.I.S.','Координация и общий помощник'],['Astra','Творчество и идеи'],['Luna','Анализ и знания'],['Terra','Практические задачи'],['Кибер','Безопасность и защита']];
 const wakeWords=['джарвис','jarvis','астра','astra','луна','luna','сайбер','кибер','cyber','терра','terra'];
 const activationPersonas={'джарвис':'J.A.R.V.I.S.','jarvis':'J.A.R.V.I.S.','астра':'Astra','astra':'Astra','луна':'Luna','luna':'Luna','сайбер':'Кибер','кибер':'Кибер','cyber':'Кибер','терра':'Terra','terra':'Terra'};
@@ -78,7 +78,7 @@ if($('registration')){
     document.body?.classList?.remove('activation-active');
   },8050);
 })();
-modeButton.onclick=()=>{showMessage('Сейчас подключено управление телефоном. Управление ПК требует отдельного подключения.')};modeNav.onclick=()=>{showMessage('Сейчас подключено управление телефоном. Управление ПК требует отдельного подключения.')};appsNav.onclick=()=>{appsPanel.hidden=!appsPanel.hidden;commandsPanel.hidden=true;settingsPanel.hidden=true;if(!appsPanel.hidden)loadApps()};commandsNav.onclick=()=>{commandsPanel.hidden=!commandsPanel.hidden;appsPanel.hidden=true;settingsPanel.hidden=true};settingsNav.onclick=()=>{settingsPanel.hidden=!settingsPanel.hidden;appsPanel.hidden=true;commandsPanel.hidden=true;if(!settingsPanel.hidden){loadPersonas();syncSettingSwitches();populateSkills();}};refreshApps.onclick=loadApps;if($('selectAllApps'))$('selectAllApps').onclick=selectAllApps;if($('appsSearch'))$('appsSearch').oninput=filterApps;send.onclick=()=>sendCommand();command.onkeydown=e=>{if(e.key==='Enter')sendCommand()};orbButton.onclick=startListening;orbButton.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();startListening()}};saveApiKeys.onclick=()=>{apiStatus.textContent=window.AndroidJarvis?.setFishAudioKey?.(fishApiKey.value.trim())||'Сохранение доступно в APK';fishApiKey.value=''};checkUpdates.onclick=()=>{window.AndroidJarvis?.checkUpdates?.();$('updateInfo').textContent='Проверка подписанного релиза запущена…';};render();
+modeButton.onclick=()=>{showMessage('Сейчас подключено управление телефоном. Управление ПК требует отдельного подключения.')};modeNav.onclick=()=>{showMessage('Сейчас подключено управление телефоном. Управление ПК требует отдельного подключения.')};appsNav.onclick=()=>{appsPanel.hidden=!appsPanel.hidden;commandsPanel.hidden=true;settingsPanel.hidden=true;if(!appsPanel.hidden)loadApps()};commandsNav.onclick=()=>{commandsPanel.hidden=!commandsPanel.hidden;appsPanel.hidden=true;settingsPanel.hidden=true};settingsNav.onclick=()=>{settingsPanel.hidden=!settingsPanel.hidden;appsPanel.hidden=true;commandsPanel.hidden=true;if(!settingsPanel.hidden){loadPersonas();syncSettingSwitches();populateSkills();syncGigaChatSettings();}};refreshApps.onclick=loadApps;if($('selectAllApps'))$('selectAllApps').onclick=selectAllApps;if($('appsSearch'))$('appsSearch').oninput=filterApps;send.onclick=()=>sendCommand();command.onkeydown=e=>{if(e.key==='Enter')sendCommand()};orbButton.onclick=startListening;orbButton.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();startListening()}};saveApiKeys.onclick=()=>{apiStatus.textContent=window.AndroidJarvis?.setFishAudioKey?.(fishApiKey.value.trim())||'Сохранение доступно в APK';fishApiKey.value=''};checkUpdates.onclick=()=>{window.AndroidJarvis?.checkUpdates?.();$('updateInfo').textContent='Проверка подписанного релиза запущена…';};render();
 $('microphoneSettings').onclick=()=>window.AndroidJarvis?.openMicrophoneSettings?.();
 
 function syncSettingSwitches(){
@@ -89,7 +89,10 @@ function syncSettingSwitches(){
   try{
     const brain=JSON.parse(window.AndroidJarvis?.getJarvisBrainStatus?.()||'{}');
     const badge=$('brainBadge');
-    if(badge&&brain.mode==='local') badge.dataset.state='ready';
+    if(badge){
+      badge.dataset.state=brain.gigaConfigured?'ready':'saved';
+      badge.textContent=brain.gigaConfigured?'●  GIGACHAT · ОСНОВНОЙ':'◈  GIGACHAT · НУЖЕН КЛЮЧ';
+    }
   }catch(_){}
 }
 function scheduleSettingSync(){
@@ -260,14 +263,17 @@ $('skipRegistration').onclick=()=>{localStorage.setItem('jarvisOnboarded','1');l
 
   function refresh(){
     const status=readStatus();
-    const version=status.version||'0.1';
-    badge.textContent='●  JARVIS BRAIN · ЛОКАЛЬНО';
-    badge.dataset.state='ready';
     const memoryCount=Number(status.memoryEpisodes||0);
-    const memoryText=' · эпизодов памяти: '+memoryCount;
-    info.textContent=(status.neuralModelInstalled
-      ? 'JARVIS BRAIN '+version+' работает полностью локально. Нейросетевая модель установлена.'
-      : 'JARVIS BRAIN '+version+' работает локально: память и офлайн-логика активны. Нативный генератор — следующий этап.')+memoryText;
+    const memoryText=' · локальная память: '+memoryCount+' эп.';
+    if(status.gigaConfigured){
+      badge.textContent='●  GIGACHAT · ОСНОВНОЙ';
+      badge.dataset.state='ready';
+      info.textContent='GigaChat '+(status.gigaModel||'')+' — основной разговорный мозг. Локальные команды и память остаются на телефоне'+memoryText;
+    }else{
+      badge.textContent='◈  GIGACHAT · НУЖЕН КЛЮЧ';
+      badge.dataset.state='saved';
+      info.textContent='Сохраните Authorization Key GigaChat. До этого доступны только локальные команды, память и офлайн-резерв'+memoryText;
+    }
     const downloading=!!status.modelDownloadRunning;
     const testing=!!status.brainSelfTestRunning;
     const busy=downloading||testing;
@@ -289,16 +295,24 @@ $('skipRegistration').onclick=()=>{localStorage.setItem('jarvisOnboarded','1');l
   }
 
   window.onJarvisBrainState=(phase,text)=>{
-    info.textContent=String(text||'JARVIS BRAIN');
-    if(phase==='thinking'){
-      badge.textContent='◉  JARVIS BRAIN · ДУМАЕТ';
+    info.textContent=String(text||'JARVIS');
+    if(phase==='cloud_thinking'){
+      badge.textContent='◉  GIGACHAT · ДУМАЕТ';
       badge.dataset.state='thinking';
-    }else if(phase==='local_model_required'){
-      badge.textContent='◈  JARVIS BRAIN · НУЖНА МОДЕЛЬ';
+    }else if(phase==='cloud_ready'){
+      badge.textContent='●  GIGACHAT · ОСНОВНОЙ';
+      badge.dataset.state='ready';
+    }else if(phase==='cloud_error'){
+      badge.textContent='◇  GIGACHAT · ОШИБКА';
       badge.dataset.state='saved';
+    }else if(phase==='cloud_setup_required'){
+      badge.textContent='◈  GIGACHAT · НУЖЕН КЛЮЧ';
+      badge.dataset.state='saved';
+    }else if(phase==='local_ready'){
+      badge.textContent='●  JARVIS · ЛОКАЛЬНЫЙ ОТВЕТ';
+      badge.dataset.state='ready';
     }else{
-      badge.textContent='●  JARVIS BRAIN · ЛОКАЛЬНО';
-      badge.dataset.state=phase||'ready';
+      deferUi(refresh,120);
     }
   };
 
@@ -359,6 +373,44 @@ $('skipRegistration').onclick=()=>{localStorage.setItem('jarvisOnboarded','1');l
     deferUi(refresh,900);
   };
 
+  function syncGigaChatSettings(){
+    try{
+      const s=JSON.parse(window.AndroidJarvis?.getGigaChatSettings?.()||'{}');
+      if(gigaModel&&s.model)gigaModel.value=s.model;
+      if(gigaScope&&s.scope)gigaScope.value=s.scope;
+      if(gigaStatus)gigaStatus.textContent=s.configured
+        ? 'GigaChat настроен · '+(s.model||'')+' · '+(s.scope||'')
+        : 'GigaChat ещё не настроен.';
+    }catch(_){}
+  }
+  window.syncGigaChatSettings=syncGigaChatSettings;
+
+  if(saveGigaChat)saveGigaChat.onclick=()=>{
+    const text=window.AndroidJarvis?.setGigaChatConfig?.(
+      gigaApiKey?.value.trim()||'',
+      gigaModel?.value||'GigaChat-2',
+      gigaScope?.value||'GIGACHAT_API_PERS'
+    )||'Сохранение GigaChat доступно в APK';
+    if(gigaApiKey)gigaApiKey.value='';
+    if(gigaStatus)gigaStatus.textContent=text;
+    deferUi(refresh,150);
+  };
+  if(testGigaChat)testGigaChat.onclick=()=>{
+    const text=window.AndroidJarvis?.testGigaChatConnection?.()||'Проверка доступна в APK';
+    if(gigaStatus)gigaStatus.textContent=text;
+  };
+  if(clearGigaChat)clearGigaChat.onclick=()=>{
+    const text=window.AndroidJarvis?.clearGigaChatKey?.()||'Недоступно';
+    if(gigaApiKey)gigaApiKey.value='';
+    if(gigaStatus)gigaStatus.textContent=text;
+    deferUi(refresh,150);
+  };
+  window.onGigaChatConnectionStatus=(phase,text)=>{
+    if(gigaStatus)gigaStatus.textContent=String(text||'Статус GigaChat обновлён.');
+    if(phase==='success')deferUi(refresh,150);
+  };
+
+  syncGigaChatSettings();
   refresh();
   settingsNav.addEventListener('click',refresh);
 })();
