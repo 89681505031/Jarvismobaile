@@ -49,10 +49,6 @@ class JarvisBrainEngine(
             return Result(true, it, Source.MEMORY)
         }
 
-        relevantMemoryAnswer(clean)?.let {
-            return Result(true, it, Source.MEMORY)
-        }
-
         conversationAnswer(normalized)?.let {
             return Result(true, it, Source.CONVERSATION)
         }
@@ -86,33 +82,30 @@ class JarvisBrainEngine(
             "Кибер", "Cyber" -> "Кибер: технический помощник."
             else -> "J.A.R.V.I.S.: универсальный персональный помощник."
         }
-        val facts = memory.approvedBrainFacts(query).take(700)
-        val selectedTurns = LinkedHashMap<String, Pair<String, String>>()
-        memory.relevantDialogues(query, 1).forEach { turn ->
-            selectedTurns[turn.first + "\u0000" + turn.second] = turn
-        }
-        memory.recentDialogues().takeLast(1).forEach { turn ->
-            selectedTurns[turn.first + "\u0000" + turn.second] = turn
-        }
-        val turns = selectedTurns.values.toList().takeLast(2)
-            .joinToString("\n") { (user, assistant) ->
-                "Пользователь: ${user.take(160)}\nJARVIS: ${assistant.take(220)}"
-            }
+
+        // Current user intent must always fit into the smallest Instant prompt.
+        // Memory is secondary context and must never push the live question out.
+        val currentQuestion = query.trim().take(520)
+        val facts = memory.approvedBrainFacts(query).take(220)
+        val relevantTurn = memory.relevantDialogues(query, 1).firstOrNull()
+        val turnText = relevantTurn?.let { (user, assistant) ->
+            "Ранее пользователь: ${user.take(110)}\nРанее JARVIS: ${assistant.take(150)}"
+        }.orEmpty()
 
         return buildString {
-            append("Ты работаешь внутри JARVIS BRAIN полностью локально на телефоне.\n")
+            append("Ты локальный JARVIS BRAIN на телефоне. ")
             append(role).append("\n")
-            append("Отвечай по-русски быстро и кратко: обычно 1–3 предложения. Не выдумывай действия телефона, ")
-            append("если их не выполнил отдельный модуль команд.\n")
+            append("Ответь именно на ТЕКУЩИЙ вопрос. Не повторяй вопрос пользователя и не отвечай на старые реплики. ")
+            append("Если память не относится к вопросу — игнорируй её. Отвечай по-русски кратко и по существу.\n\n")
+            append("ТЕКУЩИЙ ВОПРОС:\n").append(currentQuestion).append("\n")
             if (facts.isNotBlank()) {
-                append("\nЛокальная долговременная память:\n").append(facts).append("\n")
+                append("\nДополнительная память, только если полезна:\n").append(facts).append("\n")
             }
-            if (turns.isNotBlank()) {
-                append("\nРелевантные и недавние эпизоды памяти:\n").append(turns).append("\n")
+            if (turnText.isNotBlank()) {
+                append("\nОдин релевантный прошлый эпизод, только как справка:\n").append(turnText).append("\n")
             }
-            append("\nТекущий вопрос пользователя:\n").append(query)
-            append("\n\nОтвет JARVIS:")
-        }.take(2_200)
+            append("\nОТВЕТ JARVIS:")
+        }
     }
 
     private fun identityAnswer(normalized: String, persona: String): String? {
@@ -247,13 +240,18 @@ class JarvisBrainEngine(
         normalized in setOf("привет", "здравствуй", "здравствуйте", "добрый день", "добрый вечер") ->
             "Здравствуйте, сэр. JARVIS BRAIN на связи."
 
+        normalized in setOf("как дела", "как ты", "как твои дела", "как поживаешь", "как поживаете") ->
+            "Всё в порядке, сэр. Я на связи и готов к вашим вопросам."
+
+        normalized in setOf("что делаешь", "чем занимаешься", "что сейчас делаешь") ->
+            "Жду вашу команду, сэр."
+
         normalized in setOf("спасибо", "благодарю", "спасибо джарвис") ->
             "Всегда к вашим услугам, сэр."
 
         normalized.contains("что ты умеешь") ->
-            "Сейчас я умею выполнять команды телефона, использовать локальную память, " +
-                "вспоминать прошлые диалоги и отвечать на часть вопросов без интернета. " +
-                "Следующий этап — локальная языковая модель для свободного диалога."
+            "Я умею выполнять команды телефона, использовать локальную память, вспоминать прошлые диалоги " +
+                "и отвечать через локальную языковую модель без внешнего ИИ."
 
         else -> null
     }
