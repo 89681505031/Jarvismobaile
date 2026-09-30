@@ -1,1 +1,200 @@
-const BRAIN_TIMEOUT_MS = 3200;\nconst MAX_TEXT_LENGTH = 1024;\n\nfunction parseBody(body) {\n  if (!body) return {};\n  if (typeof body === "string") return JSON.parse(body);\n  if (Buffer.isBuffer(body)) return JSON.parse(body.toString("utf8"));\n  return body;\n}\n\nfunction cleanForAlice(value) {\n  return String(value || "")\n    .replace(/\*\*(.*?)\*\*/g, "$1")\n    .replace(/__(.*?)__/g, "$1")\n    .replace(/^\s*#{1,6}\s+/gm, "")\n    .replace(/^\s*[-*]\s+/gm, "")\n    .replace(/`{1,3}/g, "")\n    .replace(/\s+/g, " ")\n    .trim()\n    .slice(0, MAX_TEXT_LENGTH);\n}\n\nfunction aliceResponse(text, { endSession = false, sessionState } = {}) {\n  const safeText = cleanForAlice(text) || "Сэр, я вас слушаю.";\n\n  const payload = {\n    response: {\n      text: safeText,\n      tts: safeText,\n      end_session: endSession\n    },\n    version: "1.0"\n  };\n\n  if (sessionState) {\n    payload.session_state = sessionState;\n  }\n\n  return payload;\n}\n\nasync function fetchWithTimeout(url, options = {}) {\n  const controller = new AbortController();\n  const timer = setTimeout(() => controller.abort(), BRAIN_TIMEOUT_MS);\n\n  try {\n    return await fetch(url, { ...options, signal: controller.signal });\n  } finally {\n    clearTimeout(timer);\n  }\n}\n\nfunction userKey(payload) {\n  const userId = payload?.session?.user?.user_id;\n  const applicationId = payload?.session?.application?.application_id;\n  const sessionId = payload?.session?.session_id;\n\n  return `alice:${userId || applicationId || sessionId || "anonymous"}`;\n}\n\nfunction messageKey(payload) {\n  const sessionId = payload?.session?.session_id || "unknown-session";\n  const messageId = payload?.session?.message_id ?? 0;\n  return `alice:${sessionId}:${messageId}`;\n}\n\nfunction isAllowedSkill(payload) {\n  const expected = process.env.YANDEX_ALICE_SKILL_ID;\n  if (!expected) return true;\n  return payload?.session?.skill_id === expected;\n}\n\nasync function generateJarvisReply(payload, text) {\n  const brainUrl = process.env.JARVIS_BRAIN_URL;\n\n  if (!brainUrl) {\n    if (process.env.JARVIS_TEST_REPLY) {\n      return process.env.JARVIS_TEST_REPLY;\n    }\n\n    return "Сэр, шлюз Алисы уже работает, но адрес мозга Джарвиса пока не настроен.";\n  }\n\n  const headers = {\n    "Content-Type": "application/json"\n  };\n\n  if (process.env.JARVIS_BRAIN_TOKEN) {\n    headers.Authorization = `Bearer ${process.env.JARVIS_BRAIN_TOKEN}`;\n  }\n\n  const response = await fetchWithTimeout(brainUrl, {\n    method: "POST",\n    headers,\n    body: JSON.stringify({\n      text,\n      from: userKey(payload),\n      channel: "alice",\n      message_id: messageKey(payload),\n      locale: payload?.meta?.locale || "ru-RU",\n      timezone: payload?.meta?.timezone || "",\n      session_id: payload?.session?.session_id || ""\n    })\n  });\n\n  if (!response.ok) {\n    throw new Error(`Jarvis brain failed: ${response.status} ${await response.text()}`);\n  }\n\n  const contentType = response.headers.get("content-type") || "";\n\n  if (contentType.includes("application/json")) {\n    const data = await response.json();\n    const reply = data?.reply ?? data?.text ?? data?.message;\n\n    if (!reply || typeof reply !== "string") {\n      throw new Error("Jarvis brain returned JSON without reply/text/message");\n    }\n\n    return reply;\n  }\n\n  const reply = (await response.text()).trim();\n  if (!reply) throw new Error("Jarvis brain returned an empty reply");\n  return reply;\n}\n\nexport default async function handler(req, res) {\n  if (req.method === "GET") {\n    return res.status(200).json({\n      ok: true,\n      service: "jarvis-alice-gateway",\n      brainConfigured: Boolean(process.env.JARVIS_BRAIN_URL || process.env.JARVIS_TEST_REPLY),\n      skillIdRestricted: Boolean(process.env.YANDEX_ALICE_SKILL_ID),\n      brainTimeoutMs: BRAIN_TIMEOUT_MS\n    });\n  }\n\n  if (req.method !== "POST") {\n    res.setHeader("Allow", "GET, POST");\n    return res.status(405).json({ ok: false, error: "method_not_allowed" });\n  }\n\n  let payload;\n\n  try {\n    payload = parseBody(req.body);\n  } catch {\n    return res.status(400).json(aliceResponse("Сэр, я не смог разобрать запрос Алисы."));\n  }\n\n  if (!isAllowedSkill(payload)) {\n    return res.status(403).json({ ok: false, error: "skill_not_allowed" });\n  }\n\n  const original = payload?.request?.original_utterance?.trim();\n  const command = payload?.request?.command?.trim();\n  const utterance = original || command || "";\n\n  if (payload?.session?.new && !utterance) {\n    return res.status(200).json(\n      aliceResponse(\n        "Джарвис на связи, сэр. Я подключён к тому же мозгу, что и Джарвис Мобайл. Что прикажете?",\n        { sessionState: { channel: "alice" } }\n      )\n    );\n  }\n\n  if (!utterance) {\n    return res.status(200).json(\n      aliceResponse("Сэр, повторите команду.", { sessionState: { channel: "alice" } })\n    );\n  }\n\n  const normalized = utterance.toLowerCase();\n  if (["выход", "закончить", "закрой джарвис", "закрыть джарвис"].includes(normalized)) {\n    return res.status(200).json(aliceResponse("До связи, сэр.", { endSession: true }));\n  }\n\n  try {\n    const reply = await generateJarvisReply(payload, utterance);\n    return res.status(200).json(\n      aliceResponse(reply, { sessionState: { channel: "alice" } })\n    );\n  } catch (error) {\n    console.error("Alice gateway error:", error);\n\n    const timeout =\n      error?.name === "AbortError" ||\n      String(error?.message || "").toLowerCase().includes("aborted");\n\n    const fallback = timeout\n      ? "Сэр, мозг Джарвиса отвечает слишком долго. Повторите команду."\n      : "Сэр, сейчас не удалось связаться с мозгом Джарвиса. Повторите команду.";\n\n    return res.status(200).json(\n      aliceResponse(fallback, { sessionState: { channel: "alice" } })\n    );\n  }\n}\n
+const BRAIN_TIMEOUT_MS = 3200;
+const MAX_TEXT_LENGTH = 1024;
+
+function parseBody(body) {
+  if (!body) return {};
+  if (typeof body === "string") return JSON.parse(body);
+  if (Buffer.isBuffer(body)) return JSON.parse(body.toString("utf8"));
+  return body;
+}
+
+function cleanForAlice(value) {
+  return String(value || "")
+    .replace(/\*\*(.*?)\*\*/g, "$1")
+    .replace(/__(.*?)__/g, "$1")
+    .replace(/^\s*#{1,6}\s+/gm, "")
+    .replace(/^\s*[-*]\s+/gm, "")
+    .replace(/`{1,3}/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, MAX_TEXT_LENGTH);
+}
+
+function aliceResponse(text, { endSession = false, sessionState } = {}) {
+  const safeText = cleanForAlice(text) || "Сэр, я вас слушаю.";
+
+  const payload = {
+    response: {
+      text: safeText,
+      tts: safeText,
+      end_session: endSession
+    },
+    version: "1.0"
+  };
+
+  if (sessionState) {
+    payload.session_state = sessionState;
+  }
+
+  return payload;
+}
+
+async function fetchWithTimeout(url, options = {}) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), BRAIN_TIMEOUT_MS);
+
+  try {
+    return await fetch(url, { ...options, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function userKey(payload) {
+  const userId = payload?.session?.user?.user_id;
+  const applicationId = payload?.session?.application?.application_id;
+  const sessionId = payload?.session?.session_id;
+
+  return `alice:${userId || applicationId || sessionId || "anonymous"}`;
+}
+
+function messageKey(payload) {
+  const sessionId = payload?.session?.session_id || "unknown-session";
+  const messageId = payload?.session?.message_id ?? 0;
+  return `alice:${sessionId}:${messageId}`;
+}
+
+function isAllowedSkill(payload) {
+  const expected = process.env.YANDEX_ALICE_SKILL_ID;
+  if (!expected) return true;
+  return payload?.session?.skill_id === expected;
+}
+
+async function generateJarvisReply(payload, text) {
+  const brainUrl = process.env.JARVIS_BRAIN_URL;
+
+  if (!brainUrl) {
+    if (process.env.JARVIS_TEST_REPLY) {
+      return process.env.JARVIS_TEST_REPLY;
+    }
+
+    return "Сэр, шлюз Алисы уже работает, но адрес мозга Джарвиса пока не настроен.";
+  }
+
+  const headers = {
+    "Content-Type": "application/json"
+  };
+
+  if (process.env.JARVIS_BRAIN_TOKEN) {
+    headers.Authorization = `Bearer ${process.env.JARVIS_BRAIN_TOKEN}`;
+  }
+
+  const response = await fetchWithTimeout(brainUrl, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({
+      text,
+      from: userKey(payload),
+      channel: "alice",
+      message_id: messageKey(payload),
+      locale: payload?.meta?.locale || "ru-RU",
+      timezone: payload?.meta?.timezone || "",
+      session_id: payload?.session?.session_id || ""
+    })
+  });
+
+  if (!response.ok) {
+    throw new Error(`Jarvis brain failed: ${response.status} ${await response.text()}`);
+  }
+
+  const contentType = response.headers.get("content-type") || "";
+
+  if (contentType.includes("application/json")) {
+    const data = await response.json();
+    const reply = data?.reply ?? data?.text ?? data?.message;
+
+    if (!reply || typeof reply !== "string") {
+      throw new Error("Jarvis brain returned JSON without reply/text/message");
+    }
+
+    return reply;
+  }
+
+  const reply = (await response.text()).trim();
+  if (!reply) throw new Error("Jarvis brain returned an empty reply");
+  return reply;
+}
+
+export default async function handler(req, res) {
+  if (req.method === "GET") {
+    return res.status(200).json({
+      ok: true,
+      service: "jarvis-alice-gateway",
+      brainConfigured: Boolean(process.env.JARVIS_BRAIN_URL || process.env.JARVIS_TEST_REPLY),
+      skillIdRestricted: Boolean(process.env.YANDEX_ALICE_SKILL_ID),
+      brainTimeoutMs: BRAIN_TIMEOUT_MS
+    });
+  }
+
+  if (req.method !== "POST") {
+    res.setHeader("Allow", "GET, POST");
+    return res.status(405).json({ ok: false, error: "method_not_allowed" });
+  }
+
+  let payload;
+
+  try {
+    payload = parseBody(req.body);
+  } catch {
+    return res.status(400).json(aliceResponse("Сэр, я не смог разобрать запрос Алисы."));
+  }
+
+  if (!isAllowedSkill(payload)) {
+    return res.status(403).json({ ok: false, error: "skill_not_allowed" });
+  }
+
+  const original = payload?.request?.original_utterance?.trim();
+  const command = payload?.request?.command?.trim();
+  const utterance = original || command || "";
+
+  if (payload?.session?.new && !utterance) {
+    return res.status(200).json(
+      aliceResponse(
+        "Джарвис на связи, сэр. Я подключён к тому же мозгу, что и Джарвис Мобайл. Что прикажете?",
+        { sessionState: { channel: "alice" } }
+      )
+    );
+  }
+
+  if (!utterance) {
+    return res.status(200).json(
+      aliceResponse("Сэр, повторите команду.", { sessionState: { channel: "alice" } })
+    );
+  }
+
+  const normalized = utterance.toLowerCase();
+  if (["выход", "закончить", "закрой джарвис", "закрыть джарвис"].includes(normalized)) {
+    return res.status(200).json(aliceResponse("До связи, сэр.", { endSession: true }));
+  }
+
+  try {
+    const reply = await generateJarvisReply(payload, utterance);
+    return res.status(200).json(
+      aliceResponse(reply, { sessionState: { channel: "alice" } })
+    );
+  } catch (error) {
+    console.error("Alice gateway error:", error);
+
+    const timeout =
+      error?.name === "AbortError" ||
+      String(error?.message || "").toLowerCase().includes("aborted");
+
+    const fallback = timeout
+      ? "Сэр, мозг Джарвиса отвечает слишком долго. Повторите команду."
+      : "Сэр, сейчас не удалось связаться с мозгом Джарвиса. Повторите команду.";
+
+    return res.status(200).json(
+      aliceResponse(fallback, { sessionState: { channel: "alice" } })
+    );
+  }
+}
