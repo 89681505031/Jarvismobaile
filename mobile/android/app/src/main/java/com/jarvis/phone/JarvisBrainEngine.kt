@@ -65,7 +65,7 @@ class JarvisBrainEngine(
 
         return Result(
             success = false,
-            text = "Сэр, этот вопрос требует локальной языковой модели. Установите JARVIS Lite в настройках.",
+            text = "Сэр, этот вопрос требует локальной языковой модели. Установите JARVIS Instant в настройках.",
             source = Source.LOCAL_FALLBACK
         )
     }
@@ -88,8 +88,8 @@ class JarvisBrainEngine(
         val currentQuestion = query.trim().take(520)
         val facts = memory.approvedBrainFacts(query).take(220)
         val relevantTurn = memory.relevantDialogues(query, 1).firstOrNull()
-        val turnText = relevantTurn?.let { (user, assistant) ->
-            "Ранее пользователь: ${user.take(110)}\nРанее JARVIS: ${assistant.take(150)}"
+        val turnText = relevantTurn?.first?.let { user ->
+            "Ранее пользователь: ${user.take(130)}"
         }.orEmpty()
 
         return buildString {
@@ -236,24 +236,30 @@ class JarvisBrainEngine(
         return "Я помню: ${best.first}"
     }
 
-    private fun conversationAnswer(normalized: String): String? = when {
-        normalized in setOf("привет", "здравствуй", "здравствуйте", "добрый день", "добрый вечер") ->
-            "Здравствуйте, сэр. JARVIS BRAIN на связи."
+    private fun conversationAnswer(normalized: String): String? {
+        val phrase = normalized.trim().trim('?', '!', '.', ',', ':', ';')
+        return when {
+            phrase in setOf("привет", "здравствуй", "здравствуйте", "добрый день", "добрый вечер") ->
+                "Здравствуйте, сэр. JARVIS BRAIN на связи."
 
-        normalized in setOf("как дела", "как ты", "как твои дела", "как поживаешь", "как поживаете") ->
-            "Всё в порядке, сэр. Я на связи и готов к вашим вопросам."
+            phrase in setOf(
+                "как дела", "как ты", "как твои дела", "как поживаешь", "как поживаете",
+                "как дела джарвис", "джарвис как дела"
+            ) ->
+                "Всё в порядке, сэр. Я на связи и готов к вашим вопросам."
 
-        normalized in setOf("что делаешь", "чем занимаешься", "что сейчас делаешь") ->
-            "Жду вашу команду, сэр."
+            phrase in setOf("что делаешь", "чем занимаешься", "что сейчас делаешь") ->
+                "Жду вашу команду, сэр."
 
-        normalized in setOf("спасибо", "благодарю", "спасибо джарвис") ->
-            "Всегда к вашим услугам, сэр."
+            phrase in setOf("спасибо", "благодарю", "спасибо джарвис") ->
+                "Всегда к вашим услугам, сэр."
 
-        normalized.contains("что ты умеешь") ->
-            "Я умею выполнять команды телефона, использовать локальную память, вспоминать прошлые диалоги " +
-                "и отвечать через локальную языковую модель без внешнего ИИ."
+            phrase.contains("что ты умеешь") ->
+                "Я умею выполнять команды телефона, использовать локальную память, вспоминать прошлые диалоги " +
+                    "и отвечать через локальную языковую модель без внешнего ИИ."
 
-        else -> null
+            else -> null
+        }
     }
 
     private fun overlapScore(a: Set<String>, b: Set<String>): Int =
