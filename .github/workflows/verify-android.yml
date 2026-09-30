@@ -1,0 +1,28 @@
+name: Verify Android changes
+
+on:
+  push:
+    branches: [fix-microphone-sensitivity]
+    paths:
+      - 'mobile/android/**'
+      - 'tests/**'
+      - 'memory-gateway/**'
+      - '.github/workflows/**'
+  pull_request:
+    paths:
+      - 'mobile/android/**'
+      - 'tests/**'
+      - 'memory-gateway/**'
+      - '.github/workflows/**'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android-verify-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    uses: ./.github/workflows/build-apk.yml
+    secrets: inherit

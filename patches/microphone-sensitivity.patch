@@ -1,0 +1,334 @@
+--- a/mobile/android/app/src/main/java/com/jarvis/phone/MainActivity.kt
++++ b/mobile/android/app/src/main/java/com/jarvis/phone/MainActivity.kt
+@@ -39,6 +39,7 @@
+     private lateinit var router: PhoneCommandRouter
+     private lateinit var gigaChat: GigaChatClient
+     private var speechRecognizer: SpeechRecognizer? = null
++    private var lastPartialSpeech = ""
+     private var tts: TextToSpeech? = null
+     private var ttsReady = false
+     private var selectedPersona = "J.A.R.V.I.S."
+@@ -97,21 +98,45 @@
+         speechRecognizer?.destroy()
+         speechRecognizer = SpeechRecognizer.createSpeechRecognizer(this)
+         speechRecognizer?.setRecognitionListener(object : RecognitionListener {
+-            override fun onReadyForSpeech(params: Bundle?) = Unit
++            override fun onReadyForSpeech(params: Bundle?) {
++                lastPartialSpeech = ""
++            }
++
+             override fun onBeginningOfSpeech() = Unit
+             override fun onRmsChanged(rmsdB: Float) = Unit
+             override fun onBufferReceived(buffer: ByteArray?) = Unit
+             override fun onEndOfSpeech() = Unit
+-            override fun onPartialResults(partialResults: Bundle?) = Unit
++
++            override fun onPartialResults(partialResults: Bundle?) {
++                if (isSpeaking) return
++                val preferWakeWord = wakeListening && !manualListening
++                val partial = selectBestSpeech(partialResults, preferWakeWord)
++                if (partial.isNotBlank()) lastPartialSpeech = partial
++            }
++
+             override fun onEvent(eventType: Int, params: Bundle?) = Unit
++
+             override fun onError(error: Int) {
+                 if (isSpeaking) return
+ 
+                 val wasManual = manualListening
+-                val wasConversation = conversationUntil > System.currentTimeMillis()
++                val wasConversation = conversationUntil > System.currentTimeMillis() || wasManual
++                val partialFallback = lastPartialSpeech.trim()
++                lastPartialSpeech = ""
+                 manualListening = false
+                 wakeListening = false
+ 
++                // Quiet speech is sometimes delivered only through partial results and then
++                // the Android recognizer ends with NO_MATCH/SPEECH_TIMEOUT. Reuse the partial
++                // text instead of throwing away speech that was already heard.
++                if ((error == SpeechRecognizer.ERROR_NO_MATCH ||
++                        error == SpeechRecognizer.ERROR_SPEECH_TIMEOUT) &&
++                    partialFallback.isNotBlank()
++                ) {
++                    deliverSpeechResult(partialFallback, wasConversation)
++                    return
++                }
++
+                 if (error == SpeechRecognizer.ERROR_AUDIO ||
+                     error == SpeechRecognizer.ERROR_CLIENT ||
+                     error == SpeechRecognizer.ERROR_RECOGNIZER_BUSY
+@@ -153,32 +178,104 @@
+ 
+                 restartWakeListening()
+             }
++
+             override fun onResults(results: Bundle?) {
+                 if (isSpeaking) return
+                 val wasConversation = conversationUntil > System.currentTimeMillis() || manualListening
+-                wakeListening = false
+-                manualListening = false
+-                conversationUntil = 0L
+-                val text = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull()?.trim().orEmpty()
+-                if (text.isBlank()) {
+-                    restartWakeListening()
+-                    return
+-                }
+-                val escaped = JSONObject.quote(text)
+-                runOnUiThread {
+-                    if (::webView.isInitialized) {
+-                        webView.evaluateJavascript("window.onJarvisSpeechResult && window.onJarvisSpeechResult($escaped)", null)
+-                    }
+-                    mainHandler.postDelayed({
+-                        if (!isSpeaking && conversationUntil <= System.currentTimeMillis() && !manualListening) {
+-                            restartWakeListening()
+-                        }
+-                    }, if (wasConversation) 650L else 350L)
+-                }
++                val preferWakeWord = wakeListening && !manualListening
++                val finalText = selectBestSpeech(results, preferWakeWord)
++                val text = if (finalText.isNotBlank()) finalText else lastPartialSpeech
++                lastPartialSpeech = ""
++                deliverSpeechResult(text, wasConversation)
+             }
+         })
+     }
+ 
++    private fun selectBestSpeech(results: Bundle?, preferWakeWord: Boolean): String {
++        val candidates = results
++            ?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
++            ?.map { it.trim() }
++            ?.filter { it.isNotBlank() }
++            .orEmpty()
++        if (candidates.isEmpty()) return ""
++
++        val confidence = results?.getFloatArray(SpeechRecognizer.CONFIDENCE_SCORES)
++        val best = candidates.mapIndexed { index, candidate ->
++            var score = confidence?.getOrNull(index)?.takeIf { it >= 0f } ?: (1f - index * 0.05f)
++            if (preferWakeWord && startsWithWakeWord(candidate)) score += 2f
++            candidate to score
++        }.maxByOrNull { it.second }?.first ?: candidates.first()
++
++        return normalizeWakeAlias(best)
++    }
++
++    private fun startsWithWakeWord(text: String): Boolean {
++        val firstWord = text.trim()
++            .lowercase(Locale("ru", "RU"))
++            .substringBefore(' ')
++            .trim(',', '.', '!', '?', ':', ';')
++        return firstWord in setOf(
++            "джарвис", "jarvis", "джервис", "жарвис", "джарвес", "джаврис",
++            "астра", "astra", "луна", "luna", "сайбер", "cyber", "терра", "terra"
++        )
++    }
++
++    private fun normalizeWakeAlias(text: String): String {
++        val alias = Regex(
++            "^\\s*(джервис|жарвис|джарвес|джаврис)(?=[\\s,.!?;:]|$)",
++            RegexOption.IGNORE_CASE
++        )
++        return alias.replaceFirst(text.trim(), "джарвис")
++    }
++
++    private fun deliverSpeechResult(text: String, wasConversation: Boolean) {
++        wakeListening = false
++        manualListening = false
++        conversationUntil = 0L
++        val clean = text.trim()
++        if (clean.isBlank()) {
++            restartWakeListening()
++            return
++        }
++
++        val escaped = JSONObject.quote(clean)
++        runOnUiThread {
++            if (::webView.isInitialized) {
++                webView.evaluateJavascript(
++                    "window.onJarvisSpeechResult && window.onJarvisSpeechResult($escaped)",
++                    null
++                )
++            }
++            mainHandler.postDelayed({
++                if (!isSpeaking && conversationUntil <= System.currentTimeMillis() && !manualListening) {
++                    restartWakeListening()
++                }
++            }, if (wasConversation) 650L else 350L)
++        }
++    }
++
++    private fun buildSpeechIntent(maxResults: Int, conversationMode: Boolean): Intent =
++        Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
++            putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
++            putExtra(RecognizerIntent.EXTRA_LANGUAGE, "ru-RU")
++            putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, "ru-RU")
++            putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, maxResults)
++            putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
++            putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, false)
++
++            // These values are hints. Some recognition services ignore them, but when
++            // supported they prevent quiet speech and natural pauses from being cut off.
++            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS, 500L)
++            putExtra(
++                RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS,
++                if (conversationMode) 1200L else 900L
++            )
++            putExtra(
++                RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS,
++                if (conversationMode) 1800L else 1400L
++            )
++        }
++
+     private fun startListening() {
+         startConversationListening(10_000)
+     }
+@@ -231,14 +328,8 @@
+         }
+         manualListening = true
+         try {
+-            val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+-                putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+-                putExtra(RecognizerIntent.EXTRA_LANGUAGE, "ru-RU")
+-                putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, "ru-RU")
+-                putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 3)
+-                putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, false)
+-            }
+-            speechRecognizer?.startListening(intent)
++            lastPartialSpeech = ""
++            speechRecognizer?.startListening(buildSpeechIntent(maxResults = 7, conversationMode = true))
+         } catch (_: Exception) {
+             manualListening = false
+             restartConversationListening()
+@@ -557,13 +648,8 @@
+         if (speechRecognizer == null || wakeListening) return
+         wakeListening = true
+         try {
+-            val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+-                putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+-                putExtra(RecognizerIntent.EXTRA_LANGUAGE, "ru-RU")
+-                putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 3)
+-                putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, false)
+-            }
+-            speechRecognizer?.startListening(intent)
++            lastPartialSpeech = ""
++            speechRecognizer?.startListening(buildSpeechIntent(maxResults = 7, conversationMode = false))
+         } catch (_: Exception) { wakeListening = false }
+     }
+ 
+--- a/mobile/android/app/src/main/java/com/jarvis/phone/JarvisWakeService.kt
++++ b/mobile/android/app/src/main/java/com/jarvis/phone/JarvisWakeService.kt
+@@ -15,6 +15,7 @@
+ 
+ class JarvisWakeService : Service() {
+     private var recognizer: SpeechRecognizer? = null
++    private var lastPartialSpeech = ""
+     private val channelId = "jarvis_wake_channel"
+ 
+     override fun onCreate() {
+@@ -41,32 +42,93 @@
+         recognizer?.destroy()
+         recognizer = SpeechRecognizer.createSpeechRecognizer(this)
+         recognizer?.setRecognitionListener(object : RecognitionListener {
+-            override fun onReadyForSpeech(params: Bundle?) = Unit
++            override fun onReadyForSpeech(params: Bundle?) { lastPartialSpeech = "" }
+             override fun onBeginningOfSpeech() = Unit
+             override fun onRmsChanged(rmsdB: Float) = Unit
+             override fun onBufferReceived(buffer: ByteArray?) = Unit
+             override fun onEndOfSpeech() = Unit
+-            override fun onPartialResults(partialResults: Bundle?) = Unit
+             override fun onEvent(eventType: Int, params: Bundle?) = Unit
+-            override fun onError(error: Int) { restart() }
+-            override fun onResults(results: Bundle?) {
+-                val text = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull().orEmpty().lowercase(Locale("ru", "RU"))
+-                val wakeWords = listOf("джарвис", "jarvis", "астра", "astra", "луна", "luna", "сайбер", "cyber", "терра", "terra")
+-                if (wakeWords.any { text.contains(it) }) {
+-                    sendBroadcast(Intent(ACTION_WAKE).setPackage(packageName).putExtra("text", text))
++
++            override fun onPartialResults(partialResults: Bundle?) {
++                val text = selectWakeCandidate(partialResults)
++                if (text.isNotBlank()) lastPartialSpeech = text
++            }
++
++            override fun onError(error: Int) {
++                if ((error == SpeechRecognizer.ERROR_NO_MATCH ||
++                        error == SpeechRecognizer.ERROR_SPEECH_TIMEOUT) &&
++                    lastPartialSpeech.isNotBlank()
++                ) {
++                    handleResult(lastPartialSpeech)
++                    lastPartialSpeech = ""
+                 }
+                 restart()
+             }
++
++            override fun onResults(results: Bundle?) {
++                val text = selectWakeCandidate(results).ifBlank { lastPartialSpeech }
++                lastPartialSpeech = ""
++                handleResult(text)
++                restart()
++            }
+         })
++        lastPartialSpeech = ""
+         val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+             putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+             putExtra(RecognizerIntent.EXTRA_LANGUAGE, "ru-RU")
+-            putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 5)
+-            putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, false)
++            putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, "ru-RU")
++            putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 7)
++            putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
++            putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, false)
++            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS, 500L)
++            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 900L)
++            putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 1400L)
+         }
+         try { recognizer?.startListening(intent) } catch (_: Exception) { restart() }
+     }
+ 
++    private fun selectWakeCandidate(results: Bundle?): String {
++        val candidates = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
++            ?.map { it.trim() }
++            ?.filter { it.isNotBlank() }
++            .orEmpty()
++        if (candidates.isEmpty()) return ""
++        val scores = results?.getFloatArray(SpeechRecognizer.CONFIDENCE_SCORES)
++        return candidates.mapIndexed { index, candidate ->
++            var score = scores?.getOrNull(index)?.takeIf { it >= 0f } ?: (1f - index * 0.05f)
++            if (startsWithWakeWord(candidate)) score += 2f
++            normalizeWakeAlias(candidate) to score
++        }.maxByOrNull { it.second }?.first.orEmpty()
++    }
++
++    private fun startsWithWakeWord(text: String): Boolean {
++        val firstWord = text.trim().lowercase(Locale("ru", "RU"))
++            .substringBefore(' ').trim(',', '.', '!', '?', ':', ';')
++        return firstWord in setOf(
++            "джарвис", "jarvis", "джервис", "жарвис", "джарвес", "джаврис",
++            "астра", "astra", "луна", "luna", "сайбер", "cyber", "терра", "terra"
++        )
++    }
++
++    private fun normalizeWakeAlias(text: String): String {
++        val alias = Regex(
++            "^\\s*(джервис|жарвис|джарвес|джаврис)(?=[\\s,.!?;:]|$)",
++            RegexOption.IGNORE_CASE
++        )
++        return alias.replaceFirst(text.trim(), "джарвис")
++    }
++
++    private fun handleResult(text: String) {
++        val normalized = normalizeWakeAlias(text).lowercase(Locale("ru", "RU"))
++        val wakeWords = listOf(
++            "джарвис", "jarvis", "астра", "astra", "луна", "luna",
++            "сайбер", "cyber", "терра", "terra"
++        )
++        if (wakeWords.any { normalized.contains(it) }) {
++            sendBroadcast(Intent(ACTION_WAKE).setPackage(packageName).putExtra("text", normalized))
++        }
++    }
++
+     private fun restart() {
+         // Avoid rapid stop/start loops that make Android's microphone indicator blink.
+         // Give the recognizer time to fully release the audio input before starting again.
+         recognizer?.cancel()
+         android.os.Handler(mainLooper).postDelayed({
+             if (recognizer != null) startRecognition()
+         }, 1200)

@@ -1,0 +1,87 @@
+--- a/mobile/android/app/src/main/java/com/jarvis/phone/GigaChatClient.kt
++++ b/mobile/android/app/src/main/java/com/jarvis/phone/GigaChatClient.kt
+@@ -18,7 +18,8 @@
+     @Volatile private var accessToken: String? = null
+     @Volatile private var tokenExpiresAt: Long = 0L
+     @Volatile private var tokenKeyFingerprint: Int? = null
++    @Volatile private var workingScope: String? = null
+ 
+     fun ask(userText: String, persona: String, memoryContext: String = ""): String {
+         val key = context.getSharedPreferences("jarvis_settings", Context.MODE_PRIVATE)
+@@ -26,19 +27,25 @@
+         if (key.isBlank()) return "В настройках J.A.R.V.I.S. не указан API ключ GigaChat."
+ 
+         return try {
+-            askOnce(key, userText, persona, memoryContext)
++            askWithScopeFallback(key, userText, persona, memoryContext)
+         } catch (e: Exception) {
+-            // The OAuth token can be rejected server-side before its local expiry time.
+-            // Refresh once on HTTP 401 instead of making the user re-enter the API key.
+-            if (e.message?.contains("HTTP 401") == true) {
+-                invalidateToken(key)
+-                try {
+-                    askOnce(key, userText, persona, memoryContext)
+-                } catch (retry: Exception) {
+-                    "Не удалось получить ответ GigaChat: ${retry.message ?: "ошибка соединения"}"
+-                }
+-            } else {
+-                "Не удалось получить ответ GigaChat: ${e.message ?: "ошибка соединения"}"
+-            }
++            "Не удалось получить ответ GigaChat: ${e.message ?: "ошибка соединения"}"
++        }
++    }
++
++    private fun askWithScopeFallback(key: String, userText: String, persona: String, memoryContext: String): String {
++        val scopes = listOfNotNull(workingScope) +
++            listOf("GIGACHAT_API_PERS", "GIGACHAT_API_B2B", "GIGACHAT_API_CORP").filter { it != workingScope }
++        var lastError: Exception? = null
++        for (scope in scopes.distinct()) {
++            try {
++                val result = askOnce(key, scope, userText, persona, memoryContext)
++                workingScope = scope
++                return result
++            } catch (e: Exception) {
++                lastError = e
++                invalidateToken(key)
++                if (e.message?.contains("HTTP 401") != true) throw e
++            }
+         }
++        throw lastError ?: IllegalStateException("GigaChat: не удалось подобрать scope для Authorization Key")
+     }
+ 
+-    private fun askOnce(key: String, userText: String, persona: String, memoryContext: String): String {
+-        val token = getToken(key)
++    private fun askOnce(key: String, scope: String, userText: String, persona: String, memoryContext: String): String {
++        val token = getToken(key, scope)
+@@ -76,17 +83,18 @@
+             tokenExpiresAt = 0L
+         }
+     }
+ 
+-    @Synchronized private fun getToken(key: String): String {
++    @Synchronized private fun getToken(key: String, scope: String): String {
+         val now = System.currentTimeMillis()
+-        val fingerprint = key.hashCode()
++        val fingerprint = "$key|$scope".hashCode()
+         if (tokenKeyFingerprint != fingerprint) {
+             accessToken = null
+             tokenExpiresAt = 0L
+             tokenKeyFingerprint = fingerprint
+         }
+         accessToken?.let { if (now + 60_000L < tokenExpiresAt) return it }
+-        val response = postForm(TOKEN_URL, "scope=GIGACHAT_API_PERS", mapOf(
++        val response = postForm(TOKEN_URL, "scope=$scope", mapOf(
+             "Authorization" to "Basic $key",
+             "RqUID" to UUID.randomUUID().toString(),
+             "Content-Type" to "application/x-www-form-urlencoded",
+--- a/mobile/android/app/src/main/java/com/jarvis/phone/JarvisWakeService.kt
++++ b/mobile/android/app/src/main/java/com/jarvis/phone/JarvisWakeService.kt
+@@ -21,7 +21,9 @@
+         super.onCreate()
+         createChannel()
+         startForeground(701, notification())
+-        startRecognition()
++        // Do not loop Android SpeechRecognizer in the background. It is session-based,
++        // and reopening it after every timeout makes the microphone indicator blink.
++        // Manual listening in MainActivity remains available.
+     }
