@@ -1057,12 +1057,29 @@ class MainActivity : Activity() {
     }
 
 
+    private fun summarizeFetchedNews(headlines: List<String>, place: String? = null): String {
+        if (headlines.isEmpty()) return JarvisNewsSummary.fallback(headlines, place)
+        if (!gigaChat.configured()) return JarvisNewsSummary.fallback(headlines, place)
+
+        val result = gigaChat.askConversation(
+            userText = JarvisNewsSummary.prompt(headlines, place),
+            persona = selectedPersona,
+            memoryContext = "",
+            recentTurns = emptyList()
+        )
+        return if (result.success && JarvisNewsSummary.usableModelSummary(result.text)) {
+            result.text
+        } else {
+            JarvisNewsSummary.fallback(headlines, place)
+        }
+    }
+
     private fun fetchNewsAndSpeak() {
         showVoiceStatus("Получаю свежие новости…")
         backgroundExecutor.execute {
             val finalText = try {
                 val items = newsFeed.fetchMainHeadlines()
-                JarvisNewsSummary.fallback(items)
+                summarizeFetchedNews(items)
             } catch (_: Exception) {
                 "Не удалось получить свежие новости. Проверьте интернет и повторите запрос."
             }
@@ -1126,23 +1143,25 @@ class MainActivity : Activity() {
         }
         showVoiceStatus("Ищу свежие новости рядом с текущим районом…")
         localInfo.requestLocalNewsHeadlines { result ->
-            val value = result.fold(
-                onSuccess = { (place, headlines) ->
-                    if (headlines.isEmpty()) {
-                        "Не нашёл свежих местных заголовков для ${place.label}."
-                    } else {
-                        JarvisNewsSummary.fallback(headlines, place.label)
+            backgroundExecutor.execute {
+                val value = result.fold(
+                    onSuccess = { (place, headlines) ->
+                        if (headlines.isEmpty()) {
+                            "Не нашёл свежих местных заголовков для ${place.label}."
+                        } else {
+                            summarizeFetchedNews(headlines, place.label)
+                        }
+                    },
+                    onFailure = {
+                        "Не удалось получить местные новости. Проверьте интернет, геолокацию и повторите."
                     }
-                },
-                onFailure = {
-                    "Не удалось получить местные новости. Проверьте интернет, геолокацию и повторите."
+                )
+                runOnUiThread {
+                    if (isFinishing || isDestroyed) return@runOnUiThread
+                    voiceEvent("onJarvisLocalInfo", "local_news", value)
+                    voiceEvent("onJarvisBrainResult", value)
+                    speak(value, resumeAfterSpeech = true)
                 }
-            )
-            runOnUiThread {
-                if (isFinishing || isDestroyed) return@runOnUiThread
-                voiceEvent("onJarvisLocalInfo", "local_news", value)
-                voiceEvent("onJarvisBrainResult", value)
-                speak(value, resumeAfterSpeech = true)
             }
         }
     }
