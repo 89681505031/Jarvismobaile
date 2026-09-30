@@ -190,18 +190,48 @@ test('PLUS local vision only starts after a user tap', () => {
   assert.equal(taps,2);
 });
 
-test('JARVIS BRAIN is local and exposes the GGUF picker without a cloud key', () => {
+test('GigaChat is primary while local GGUF remains an offline fallback', () => {
   const { context, elements } = load();
   const calls=[];
   context.window.AndroidJarvis.chooseJarvisBrainModel=()=>calls.push('choose');
-  assert.match(elements.get('brainBadge').textContent,/JARVIS BRAIN/);
-  assert.match(elements.get('brainBadge').textContent,/ЛОКАЛЬНО/);
+  assert.match(elements.get('brainBadge').textContent,/GIGACHAT/);
   elements.get('chooseBrainModel').onclick();
   assert.deepEqual(calls,['choose']);
-  context.window.onJarvisBrainState('thinking','JARVIS BRAIN думает локально…');
+  context.window.onJarvisBrainState('cloud_thinking','GigaChat формирует ответ…');
+  assert.match(elements.get('brainBadge').textContent,/GIGACHAT/);
   assert.match(elements.get('brainBadge').textContent,/ДУМАЕТ/);
-  context.window.onJarvisBrainState('ready','Локальный ответ готов');
-  assert.match(elements.get('brainBadge').textContent,/ЛОКАЛЬНО/);
+  context.window.onJarvisBrainState('cloud_ready','Ответ GigaChat готов');
+  assert.match(elements.get('brainBadge').textContent,/ОСНОВНОЙ/);
+});
+
+test('GigaChat settings save and test through the Android bridge',()=>{
+  const {context,elements}=load();
+  const calls=[];
+  context.window.AndroidJarvis.setGigaChatConfig=(key,model,scope)=>{
+    calls.push(['save',key,model,scope]);
+    return 'GigaChat настроен';
+  };
+  context.window.AndroidJarvis.testGigaChatConnection=()=>{
+    calls.push(['test']);
+    return 'Проверяю подключение к GigaChat…';
+  };
+  context.window.AndroidJarvis.clearGigaChatKey=()=>{
+    calls.push(['clear']);
+    return 'Ключ GigaChat удалён из приложения.';
+  };
+  elements.get('gigaApiKey').value='example-authorization-key';
+  elements.get('gigaModel').value='GigaChat-2';
+  elements.get('gigaScope').value='GIGACHAT_API_PERS';
+  elements.get('saveGigaChat').onclick();
+  elements.get('testGigaChat').onclick();
+  elements.get('clearGigaChat').onclick();
+  assert.deepEqual(calls,[
+    ['save','example-authorization-key','GigaChat-2','GIGACHAT_API_PERS'],
+    ['test'],
+    ['clear']
+  ]);
+  context.window.onGigaChatConnectionStatus('success','Связь работает');
+  assert.match(elements.get('gigaStatus').textContent,/Связь работает/);
 });
 
 test('built-in local model buttons select the expected verified profiles',()=>{
