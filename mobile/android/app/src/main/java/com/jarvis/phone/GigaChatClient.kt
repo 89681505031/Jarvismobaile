@@ -174,8 +174,8 @@ class GigaChatClient(private val context: Context) {
     private fun request(endpoint: String, payload: ByteArray, headers: Map<String, String>): String {
         val connection = (URL(endpoint).openConnection() as HttpURLConnection).apply {
             requestMethod = "POST"
-            connectTimeout = 15_000
-            readTimeout = 45_000
+            connectTimeout = 8_000
+            readTimeout = 20_000
             instanceFollowRedirects = false
             doInput = true
             doOutput = true
