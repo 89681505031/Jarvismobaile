@@ -33,6 +33,7 @@ jobs:
         working-directory: mobile/android
         env:
           JARVIS_ARM64_ONLY: "1"
+          JARVIS_ENABLE_LOCAL_LLM: "1"
         run: gradle --no-daemon assembleDebug
       - name: Verify native brain library is packaged
         run: |
