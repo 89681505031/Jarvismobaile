@@ -1922,6 +1922,7 @@ class MainActivity : Activity() {
         @JavascriptInterface
         fun getApiKeyStatus(): String = JSONObject().apply {
             put("fish", prefs.getString("fish_api_key", "").orEmpty().isNotBlank())
+            put("giga", gigaChat.configured())
         }.toString()
 
         @JavascriptInterface
