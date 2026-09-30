@@ -21,7 +21,11 @@ android {
         }
         externalNativeBuild {
             cmake {
-                val fullBrain = if (System.getenv("JARVIS_DIAGNOSTIC") == "1") "OFF" else "ON"
+                val fullBrain = when {
+                    System.getenv("JARVIS_DIAGNOSTIC") == "1" -> "OFF"
+                    System.getenv("JARVIS_ENABLE_LOCAL_LLM") == "1" -> "ON"
+                    else -> "OFF"
+                }
                 arguments.add("-DJARVIS_BRAIN_NATIVE=$fullBrain")
             }
         }
