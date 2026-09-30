@@ -47,10 +47,23 @@ object JarvisNewsSummary {
     }
 
     fun fallback(headlines: List<String>, place: String? = null): String {
-        val prefix = if (place.isNullOrBlank()) "Главные свежие заголовки"
-            else "Свежие местные заголовки для $place"
-        val items = headlines.filter { it.isNotBlank() }.take(5)
-        return if (items.isEmpty()) "Не удалось получить свежие новостные заголовки."
-        else "$prefix: " + items.joinToString(". ")
+        val prefix = if (place.isNullOrBlank()) "Главные свежие новости"
+            else "Свежие местные новости для $place"
+        val items = headlines
+            .map { it.replace(Regex("\\s+"), " ").trim() }
+            .filter { it.isNotBlank() }
+            .distinct()
+            .take(5)
+        return if (items.isEmpty()) {
+            "Не удалось получить свежие новостные заголовки."
+        } else {
+            buildString {
+                append(prefix).append(":\n")
+                items.forEachIndexed { index, item ->
+                    append(index + 1).append(". ").append(item)
+                    if (index != items.lastIndex) append('\n')
+                }
+            }
+        }
     }
 }
