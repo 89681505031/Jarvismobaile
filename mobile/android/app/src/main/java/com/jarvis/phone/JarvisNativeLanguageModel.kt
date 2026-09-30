@@ -92,7 +92,7 @@ class JarvisNativeLanguageModel(
                 val promptLimit = if (profileId == "qwen25-0.5b-q4_0") 1_200 else 2_200
                 val tokenLimit = if (profileId == "qwen25-0.5b-q4_0") 48 else 96
                 val rawOutput = nativeGenerate(
-                    prompt = preparedPrompt.take(promptLimit),
+                    prompt = fitPromptKeepingQuestion(preparedPrompt, promptLimit),
                     maxNewTokens = maxNewTokens.coerceIn(8, tokenLimit)
                 ).orEmpty()
                 if (rawOutput == "__JARVIS_TIMEOUT__") {
@@ -122,6 +122,26 @@ class JarvisNativeLanguageModel(
                     text = "Ошибка локального нейросетевого движка."
                 )
             }
+        }
+    }
+
+    private fun fitPromptKeepingQuestion(prompt: String, limit: Int): String {
+        if (prompt.length <= limit) return prompt
+        val marker = "ТЕКУЩИЙ ВОПРОС:"
+        val questionIndex = prompt.indexOf(marker)
+        if (questionIndex < 0) return prompt.take(limit)
+
+        val introBudget = minOf(360, questionIndex)
+        val intro = prompt.take(introBudget).trimEnd()
+        val liveQuestionAndTail = prompt.substring(questionIndex)
+        val tailBudget = (limit - intro.length - 2).coerceAtLeast(0)
+
+        return if (liveQuestionAndTail.length <= tailBudget) {
+            intro + "\n\n" + liveQuestionAndTail
+        } else {
+            // Preserve the beginning of the live question; discard secondary
+            // memory/context before ever discarding the user's current intent.
+            intro + "\n\n" + liveQuestionAndTail.take(tailBudget)
         }
     }
 
