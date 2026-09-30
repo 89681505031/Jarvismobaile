@@ -135,11 +135,6 @@ class MainActivity : Activity() {
         localLanguageModel = JarvisNativeLanguageModel(modelStore)
         brain = JarvisBrainEngine(memory, localLanguageModel)
         gigaChat = GigaChatClient(this)
-        if (modelStore.modelFile() != null) {
-            modelExecutor.execute {
-                localLanguageModel.prepare()
-            }
-        }
         tts = TextToSpeech(this) { status ->
             ttsReady = status == TextToSpeech.SUCCESS
             if (ttsReady) {
@@ -1866,10 +1861,17 @@ class MainActivity : Activity() {
             modelExecutor.execute {
                 val started = SystemClock.elapsedRealtime()
                 val result = try {
-                    localLanguageModel.generate(
-                        prompt = "Ты JARVIS BRAIN. Ответь одной короткой фразой по-русски: локальный мозг работает. /no_think",
-                        maxNewTokens = 64
-                    )
+                    if (!localLanguageModel.prepare()) {
+                        JarvisLanguageModel.Generation(
+                            success = false,
+                            text = "Не удалось загрузить локальную GGUF-модель в RAM."
+                        )
+                    } else {
+                        localLanguageModel.generate(
+                            prompt = "Ты JARVIS BRAIN. Ответь одной короткой фразой по-русски: локальный мозг работает. /no_think",
+                            maxNewTokens = 64
+                        )
+                    }
                 } catch (_: Throwable) {
                     JarvisLanguageModel.Generation(
                         success = false,
