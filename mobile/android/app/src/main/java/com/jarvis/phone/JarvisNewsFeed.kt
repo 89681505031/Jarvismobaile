@@ -74,8 +74,18 @@ class JarvisNewsFeed {
                     ?.replace("<![CDATA[", "")?.replace("]]>", "")
                     ?.let { Html.fromHtml(it, Html.FROM_HTML_MODE_LEGACY).toString().trim() }
 
-                title?.takeIf { it.isNotBlank() }?.let {
-                    if (source.isNullOrBlank()) it else "$it — $source"
+                title?.takeIf { it.isNotBlank() }?.let { rawTitle ->
+                    if (source.isNullOrBlank()) {
+                        rawTitle
+                    } else {
+                        val normalizedTitle = rawTitle.lowercase()
+                        val normalizedSource = source.lowercase()
+                        val alreadyTagged =
+                            normalizedTitle.endsWith(" - $normalizedSource") ||
+                            normalizedTitle.endsWith(" — $normalizedSource") ||
+                            normalizedTitle.endsWith(" | $normalizedSource")
+                        if (alreadyTagged) rawTitle else "$rawTitle — $source"
+                    }
                 }
             }.distinct().take(10).toList()
         }
