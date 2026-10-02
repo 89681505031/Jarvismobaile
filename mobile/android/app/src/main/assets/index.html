@@ -7,6 +7,7 @@
   <title>J.A.R.V.I.S. Mobile</title>
   <link rel="stylesheet" href="style.css">
   <link rel="stylesheet" href="hud-v3.css">
+<link rel="stylesheet" href="studio.css">
 </head>
 <body>
   <div id="activationOverlay" class="activation-overlay" hidden aria-hidden="true">
@@ -23,6 +24,7 @@
   </div>
   <main class="app">
     <header class="topbar"><div><div class="brand">J.A.R.V.I.S.</div><div id="status" class="status">● ONLINE</div></div><button id="modeButton" class="mode touch-button" type="button">📱 PHONE MODE</button></header>
+    <button id="openStudio" type="button" class="apps-action touch-button">Фото, файлы и подключения</button>
     <div class="hud-topline" aria-hidden="true"><span>◈ &nbsp; НЕЙРОИНТЕРФЕЙС <b>03</b></span><span id="brainBadge" aria-label="Состояние мозга JARVIS">● &nbsp; GIGACHAT · ОСНОВНОЙ</span></div>
     <div class="hud-divider" aria-hidden="true"></div>
     <section id="orbButton" class="orb-wrap touch-button" aria-label="Начать голосовой ввод" role="button" tabindex="0">
@@ -134,5 +136,48 @@
   <script src="app.js"></script>
   <script src="orb-v3.js"></script>
 
+
+<section id="studioPanel" hidden aria-label="Фото, файлы и подключения">
+<header><h2>Возможности Джарвиса</h2><button id="closeStudio" type="button">Закрыть</button></header>
+<nav><button data-tab="media">Фото и файлы</button><button data-tab="github">GitHub</button><button data-tab="vercel">Vercel</button><button data-tab="mcp">Плагины MCP</button><button data-tab="keys">Подключения</button></nav>
+<div data-pane="media">
+<h3>Файлы и сканирование</h3><button id="studioAttach">Прикрепить фото или документ</button><button id="studioClear">Убрать вложение</button>
+<p>Фото, PDF (первые 10 страниц), DOCX, TXT, код и таблицы CSV. До 10 МБ. Текст фото распознаётся лучше на латинице; русский текст проверяйте вручную.</p>
+<pre id="attachmentResult" aria-live="polite">Файл не выбран</pre>
+<label><input type="checkbox" id="attachmentConsent">Разрешаю отправить распознанный текст в GigaChat при следующем вопросе</label>
+<h3>Создание и изменение фото</h3><label for="imagePrompt">Что создать или изменить?</label><textarea id="imagePrompt" maxlength="4000" placeholder="Опишите изображение или изменения прикреплённого фото"></textarea>
+<p>Для генерации нужен отдельный ключ OpenAI API и доступный баланс. При редактировании прикреплённое фото отправляется в OpenAI.</p>
+<button id="generateImage">Создать по тексту</button><button id="editImage">Изменить прикреплённое фото</button>
+<img id="studioImage" hidden alt="Изображение Джарвиса"><button id="shareStudioImage" hidden>Сохранить или отправить</button>
+</div>
+<div data-pane="github" hidden><h3>Репозитории и файлы</h3><button id="githubRepos">Мои репозитории</button>
+<label>Репозиторий<input id="githubRepo" placeholder="89681505031/Jarvismobaile"></label>
+<label>Ветка<input id="githubBranch" value="main"></label><label>Путь файла<input id="githubPath" placeholder="README.md"></label>
+<button id="githubRead">Прочитать файл</button><label>Содержимое<textarea id="githubContent" maxlength="200000"></textarea></label>
+<label>Описание изменения<input id="githubMessage" value="Update from Jarvis Mobile"></label><button id="githubWrite">Сохранить файл в GitHub…</button>
+<p>После чтения SHA подставляется автоматически. Перед перезаписью прочитайте файл в выбранной ветке.</p></div>
+<div data-pane="vercel" hidden><h3>Проекты и развёртывания</h3>
+<label>Команда Vercel (необязательно)<input id="vercelTeam" placeholder="team_…"></label><button id="vercelProjects">Мои проекты</button>
+<label>Проект<input id="vercelProject" placeholder="prj_… или название"></label><button id="vercelDeployments">Последние развёртывания</button>
+<label>Название проекта<input id="vercelName"></label><label>ID репозитория GitHub<input id="vercelRepoId" placeholder="Числовой ID из списка репозиториев"></label>
+<label>Ветка<input id="vercelBranch" value="main"></label><button id="vercelDeploy">Создать preview-развёртывание…</button>
+<p>Репозиторий должен быть доступен установленному приложению Vercel в GitHub.</p></div>
+<div data-pane="mcp" hidden><h3>Другие плагины</h3><p>Подключите совместимый MCP-сервер с HTTPS и авторизацией токеном. Каждый вызов запускается вручную. Серверы только с OAuth требуют отдельного шлюза.</p>
+<label>Адрес MCP-сервера<input id="mcpEndpoint" type="url" placeholder="https://example.com/mcp"></label><label>Токен сервера<input id="mcpToken" type="password" autocomplete="off"></label>
+<button id="saveMcp">Сохранить MCP-подключение</button><button id="mcpList">Получить инструменты</button><label>Инструмент<select id="mcpTool"></select></label>
+<pre id="mcpSchema"></pre><label>Параметры инструмента (JSON)<textarea id="mcpArgs">{}</textarea></label><button id="mcpCall">Выполнить инструмент…</button></div>
+<div data-pane="keys" hidden><h3>Подключения</h3><p id="connectorStatus"></p>
+<label>Сервис<select id="connectorProvider"><option value="github">GitHub</option><option value="vercel">Vercel</option><option value="openai">OpenAI — фото</option></select></label>
+<label>Ключ или токен<input id="connectorToken" type="password" autocomplete="off"></label><button id="saveConnector">Сохранить подключение</button><button id="removeConnector">Отключить выбранный сервис</button>
+<p>GitHub: fine-grained token с доступом к нужным репозиториям и Contents read/write. Vercel: токен нужной команды. Ключи сохраняются зашифрованными на устройстве.</p></div>
+<h3>Поручить Джарвису работу с проектом</h3>
+<label>Задача для GitHub или Vercel<textarea id="projectTask" maxlength="2000" placeholder="Например: прочитай README моего репозитория и исправь инструкцию установки"></textarea></label>
+<p>Джарвис читает нужные данные через подключённые сервисы и готовит изменение для вашего подтверждения. Выбранные проект, репозиторий и задача отправляются в GigaChat.</p>
+<button id="projectAgent">Подготовить решение</button><button id="applyProposal" hidden>Выполнить подготовленное действие…</button>
+<pre id="projectProposal"></pre>
+<p id="studioStatus" role="status" aria-live="polite"></p><pre id="connectorResult"></pre>
+</section>
+
+<script src="studio.js"></script>
 </body>
 </html>

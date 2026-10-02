@@ -21,7 +21,7 @@ jobs:
         with:
           node-version: '22'
       - name: Verify voice interface
-        run: node --test tests/voice-ui.test.cjs tests/hud-v3.test.cjs
+        run: node --test tests/voice-ui.test.cjs tests/hud-v3.test.cjs tests/studio.test.cjs
       - uses: actions/setup-java@v5
         with:
           distribution: temurin

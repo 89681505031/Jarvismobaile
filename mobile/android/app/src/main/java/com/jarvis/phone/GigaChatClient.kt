@@ -111,7 +111,7 @@ class GigaChatClient(private val context: Context) {
                 messages.put(message("assistant", oldAssistant.trim().take(1300)))
             }
         }
-        messages.put(message("user", userText.trim().take(4000)))
+        messages.put(message("user", userText.trim().take(16000)))
         val request = JSONObject().put("model", model)
             .put("messages", messages)
             .put("stream", false)
