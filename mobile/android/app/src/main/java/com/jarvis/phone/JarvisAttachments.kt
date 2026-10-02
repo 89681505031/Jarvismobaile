@@ -25,7 +25,7 @@ class JarvisAttachments(private val context: Context) {
         return out.toByteArray()
     }
     fun clear() { text = ""; dir.listFiles()?.forEach { it.delete() } }
-    fun import(uri: Uri, result: (JSONObject) -> Unit) {
+    fun importFile(uri: Uri, result: (JSONObject) -> Unit) {
         try {
             clear()
             val resolver = context.contentResolver

@@ -594,7 +594,7 @@ class MainActivity : Activity() {
             val uri = data?.data
             if (resultCode == RESULT_OK && uri != null) connectorExecutor.execute {
                 attachmentConsent = false
-                attachments.import(uri) { result ->
+                attachments.importFile(uri) { result ->
                     runOnUiThread { if (!isFinishing && !isDestroyed) voiceEvent("onJarvisAttachment", result.toString()) }
                 }
             } else voiceEvent("onJarvisAttachment", JSONObject().put("error", "Выбор файла отменён").toString())
